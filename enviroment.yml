@@ -1,0 +1,17 @@
+name: nlp_polarization
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy=1.26.4
+  - pandas
+  - scikit-learn
+  - pip
+  - pip:
+    - transformers
+    - spacy=3.8.5
+
+
+#python -m spacy download en_core_web_sm
+#python -m nltk.downloader punkt

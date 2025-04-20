@@ -1,18 +1,19 @@
 import os
 import pandas as pd
 import joblib
+import nltk
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.svm import LinearSVC
 from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, confusion_matrix
 from sklearn.model_selection import train_test_split
-from preprocessing.pipeline_utils import preprocess_df_for_tfidf
+from pipeline_utils import preprocess_df_for_tfidf
 
 def run_tfidf_pipeline(congress_year: str):
     print(f"\n Running pipeline for Congress {congress_year}")
 
     # Paths
-    input_path = f"data/house_merged_{congress_year}.csv"
-    processed_path = f"data/processed/speeches_tfidf_{congress_year}.csv"
+    input_path = f"data/merged/house_db/house_merged_{congress_year}.csv"
+    processed_path = f"data/vectorized/speeches_tfidf_{congress_year}.csv"
     vectorizer_path = f"models/tfidf_vectorizer_{congress_year}.pkl"
     model_path = f"models/svm_classifier_{congress_year}.pkl"
     X_train_path = f"data/processed/X_train_vec_{congress_year}.pkl"
@@ -77,7 +78,7 @@ def run_tfidf_pipeline(congress_year: str):
         f.write(f"{congress_year},{accuracy:.4f},{f1:.4f},{auc if auc else 'NA'}\n")
 
 if __name__ == "__main__":
-    congress_years = [f"{i:03}" for i in range(79, 112)]
+    congress_years = [f"{i:03}" for i in range(79, 81)]
     for year in congress_years:
         try:
             run_tfidf_pipeline(year)

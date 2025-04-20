@@ -5,6 +5,15 @@ import spacy
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from typing import List
+import nltk
+
+
+# Ensure required NLTK data is available
+for resource in ["stopwords", "punkt"]:
+    try:
+        nltk.data.find(f"corpora/{resource}") if resource == "stopwords" else nltk.data.find(f"tokenizers/{resource}")
+    except LookupError:
+        nltk.download(resource)
 
 # Load SpaCy English model for lemmatization
 nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
@@ -63,3 +72,4 @@ def preprocess_df_for_bert(df: pd.DataFrame, text_col: str = "speech") -> pd.Dat
     df = remove_duplicates(df, text_col)
     df[text_col] = df[text_col].apply(clean_text_for_bert)
     return df
+
