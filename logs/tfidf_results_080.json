@@ -1,0 +1,26 @@
+{
+    "year": "080",
+    "accuracy": 0.6786,
+    "f1_score": 0.6707,
+    "auc": 0.6333,
+    "confusion_matrix": [
+        [
+            1042,
+            1182
+        ],
+        [
+            789,
+            3120
+        ]
+    ],
+    "labels": [
+        "D",
+        "R"
+    ],
+    "preprocessing_sec": 351.12,
+    "split_sec": 0.04,
+    "vectorization_sec": 12.2,
+    "training_sec": 2.21,
+    "evaluation_sec": 0.07,
+    "total_sec": 367.85
+}
