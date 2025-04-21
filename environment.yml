@@ -10,7 +10,7 @@ dependencies:
   - pip
   - pip:
     - transformers
-    - spacy=3.8.5
+    - spacy==3.8.5
 
 
 #python -m spacy download en_core_web_sm

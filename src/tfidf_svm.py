@@ -21,7 +21,9 @@ def run_tfidf_pipeline(congress_year: str):
 
     # Load and preprocess
     df = pd.read_csv(input_path)
+    print("Preprocessing speeches...")
     clean_df = preprocess_df_for_tfidf(df, text_col="speech")
+    print(f"Preprocessing complete. {len(clean_df)} speeches after cleaning.")
 
     # Save cleaned text
     os.makedirs("data/processed", exist_ok=True)
@@ -35,11 +37,14 @@ def run_tfidf_pipeline(congress_year: str):
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, stratify=y, random_state=42
     )
+    print(f"Train size: {len(X_train)}, Test size: {len(X_test)}")
 
     # Vectorize
+    print("Vectorizing text with TF-IDF...")
     tfidf = TfidfVectorizer(max_features=10000, ngram_range=(1, 2))
     X_train_vec = tfidf.fit_transform(X_train)
     X_test_vec = tfidf.transform(X_test)
+    print("Vectorization complete.")
 
     # Save vectorized matrices and model
     joblib.dump(tfidf, vectorizer_path)
@@ -47,9 +52,11 @@ def run_tfidf_pipeline(congress_year: str):
     joblib.dump(X_test_vec, X_test_path)
 
     # Train
+    print("Training Linear SVM model...")
     svm = LinearSVC()
     svm.fit(X_train_vec, y_train)
     joblib.dump(svm, model_path)
+    print("Model training complete.")
 
     # Evaluate
     y_pred = svm.predict(X_test_vec)
