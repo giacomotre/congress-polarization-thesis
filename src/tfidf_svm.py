@@ -2,6 +2,7 @@ import os
 import pandas as pd
 import joblib
 import nltk
+import json
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.svm import LinearSVC
 from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, confusion_matrix
@@ -83,6 +84,20 @@ def run_tfidf_pipeline(congress_year: str):
             f.write("year,accuracy,f1_score,auc\n")
     with open(log_path, "a") as f:
         f.write(f"{congress_year},{accuracy:.4f},{f1:.4f},{auc if auc else 'NA'}\n")
+
+    # Save JSON log (new)
+    cm = confusion_matrix(y_test, y_pred).tolist()
+    result_json = {
+        "year": congress_year,
+        "accuracy": round(accuracy, 4),
+        "f1_score": round(f1, 4),
+        "auc": round(auc, 4) if auc else "NA",
+        "confusion_matrix": cm,
+        "labels": list(set(y_test))
+    }
+    with open(f"logs/tfidf_results_{congress_year}.json", "w") as jf:
+        json.dump(result_json, jf, indent=4)
+
 
 if __name__ == "__main__":
     congress_years = [f"{i:03}" for i in range(79, 81)]
