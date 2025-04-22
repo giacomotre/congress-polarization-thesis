@@ -14,13 +14,12 @@
         ]
     ],
     "labels": [
-        "D",
-        "R"
+        "R",
+        "D"
     ],
-    "preprocessing_sec": 425.76,
-    "split_sec": 0.05,
-    "vectorization_sec": 13.84,
-    "training_sec": 2.25,
-    "evaluation_sec": 0.09,
-    "total_sec": 444.69
+    "split_sec": 0.11,
+    "vectorization_sec": 25.71,
+    "training_sec": 2.97,
+    "evaluation_sec": 0.12,
+    "total_sec": 30.09
 }

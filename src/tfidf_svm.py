@@ -28,24 +28,24 @@ def run_tfidf_pipeline(congress_year: str, config: dict):
 
     # Paths
     input_path = f"data/merged/house_db/house_merged_{congress_year}.csv"
-    processed_path = f"data/vectorized/speeches_tfidf_{congress_year}.csv"
-    vectorizer_path = f"models/tfidf_vectorizer_{congress_year}.pkl"
-    model_path = f"models/svm_classifier_{congress_year}.pkl"
-    X_train_path = f"data/processed/X_train_vec_{congress_year}.pkl"
-    X_test_path = f"data/processed/X_test_vec_{congress_year}.pkl"
+    processed_path = f"data/processed/speeches_tfidf_{congress_year}.csv"
+    
+    if Path(processed_path).exists():
+        print("Found cached clean CSV – loading instead of preprocessing")
+        clean_df = pd.read_csv(processed_path)
+    else:
+        # Load and preprocess
+        df = pd.read_csv(input_path)
+        print("Preprocessing speeches...")
+        start = time.time()
+        clean_df = preprocess_df_for_tfidf(df, text_col="speech")
+        timing["preprocessing_sec"] = round(time.time() - start, 2)
+        print(f"Preprocessing complete. {len(clean_df)} speeches after cleaning.")
 
-    # Load and preprocess
-    df = pd.read_csv(input_path)
-    print("Preprocessing speeches...")
-    start = time.time()
-    clean_df = preprocess_df_for_tfidf(df, text_col="speech")
-    timing["preprocessing_sec"] = round(time.time() - start, 2)
-    print(f"Preprocessing complete. {len(clean_df)} speeches after cleaning.")
-
-    # Save cleaned text
-    os.makedirs("data/processed", exist_ok=True)
-    os.makedirs("models", exist_ok=True)
-    clean_df.to_csv(processed_path, index=False)
+        # Save cleaned text
+        os.makedirs("data/processed", exist_ok=True)
+        os.makedirs("models", exist_ok=True)
+        clean_df.to_csv(processed_path, index=False)
 
     X = clean_df["speech"]
     y = clean_df["party"]
@@ -67,18 +67,12 @@ def run_tfidf_pipeline(congress_year: str, config: dict):
     timing["vectorization_sec"] = round(time.time() - start, 2)
     print("Vectorization complete.")
 
-    # Save vectorized matrices and model
-    joblib.dump(tfidf, vectorizer_path)
-    joblib.dump(X_train_vec, X_train_path)
-    joblib.dump(X_test_vec, X_test_path)
-
     # Train
     print("Training Linear SVM model...")
     start = time.time()
     svm = LinearSVC()
     svm.fit(X_train_vec, y_train)
     timing["training_sec"] = round(time.time() - start, 2)
-    joblib.dump(svm, model_path)
     print("Model training complete.")
 
     # Evaluate
