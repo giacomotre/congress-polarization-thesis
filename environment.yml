@@ -10,6 +10,7 @@ dependencies:
   - nltk
   - pip
   - seaborn
+  - matplotlib
   - pip:
     - transformers
     - spacy==3.8.5

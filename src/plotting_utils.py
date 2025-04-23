@@ -1,75 +1,93 @@
-import os
 import pandas as pd
-import numpy as np
+import json
 import matplotlib.pyplot as plt
-import seaborn as sns                
+import seaborn as sns
+import os
 
-PLOT_DIR = "outputs\plots"
-os.makedirs(PLOT_DIR, exist_ok=True)
+def plot_performance_metrics(csv_filepath: str, output_dir: str = "plots"):
+    """
+    Plots accuracy, F1-score, and AUC from a CSV log file across years.
 
-def plot_lines_from_log(log_path: str = "logs/tfidf_svm_performance.csv") -> None:
-    
-    if not os.path.isfile(log_path):
-        print(f"[plot_lines_from_log] ‼ No log found at {log_path}")
+    Args:
+        csv_filepath (str): The path to the CSV file containing performance metrics.
+        output_dir (str): Directory to save the plot. Defaults to "plots".
+    """
+    if not os.path.exists(csv_filepath):
+        print(f"Error: Performance metrics CSV not found at {csv_filepath}")
         return
-    
-    df = pd.read_csv(log_path)
-    df["year"] = df["year"].astype(int)
-    df.sort_values("year", inplace=True)
 
-    # Common kwargs for consistent style
-    common = dict(linewidth=2, markeredgecolor="black")
+    df = pd.read_csv(csv_filepath)
 
-    # ---- Accuracy ----
-    plt.figure(figsize=(8, 5))
-    plt.plot(df["year"], df["accuracy"], marker="o", **common)
-    _style_axes("Accuracy Over Years", "Congress Year", "Accuracy")
-    plt.savefig(os.path.join(PLOT_DIR, "accuracy_line.png"), dpi=300)
-    plt.close()
+    if df.empty:
+        print(f"No data to plot in {csv_filepath}")
+        return
 
-    # ---- F1 Score ----
-    plt.figure(figsize=(8, 5))
-    plt.plot(df["year"], df["f1_score"], marker="s", color="forestgreen", **common)
-    _style_axes("F1 Score Over Years", "Congress Year", "F1 Score")
-    plt.savefig(os.path.join(PLOT_DIR, "f1_score_line.png"), dpi=300)
-    plt.close()
+    # Ensure 'year' column is treated as categorical or string for plotting
+    df['year'] = df['year'].astype(str)
 
-    # ---- AUC ----
-    plt.figure(figsize=(8, 5))
-    plt.plot(df["year"], pd.to_numeric(df["auc"], errors="coerce"),
-             marker="^", color="firebrick", **common)
-    _style_axes("AUC Over Years", "Congress Year", "AUC")
-    plt.savefig(os.path.join(PLOT_DIR, "auc_line.png"), dpi=300)
-    plt.close()
+    plt.figure(figsize=(12, 6))
 
-def plot_confusion_matrix(y_true, y_pred,
-                        labels=None,
-                        fname: str = "confusion_matrix.png") -> None:
-    """
-    Saves a publication‑ready confusion‑matrix heat‑map.
-    Call this right after you have y_true/y_pred in your pipeline.
-    """
-    from sklearn.metrics import confusion_matrix
-    cm = confusion_matrix(y_true, y_pred, labels=labels)
-    if labels is None:
-        labels = np.unique(y_true)
+    plt.plot(df['year'], df['accuracy'], marker='o', linestyle='-', label='Accuracy')
+    plt.plot(df['year'], df['f1_score'], marker='o', linestyle='-', label='F1 Score')
+    # Only plot AUC if it exists and is not 'NA'
+    if 'auc' in df.columns and df['auc'].dtype != object:
+        # Convert 'NA' strings to NaN for plotting
+        df['auc'] = pd.to_numeric(df['auc'], errors='coerce')
+        plt.plot(df['year'], df['auc'], marker='o', linestyle='-', label='AUC')
 
-    plt.figure(figsize=(6, 5))
-    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
-                xticklabels=labels, yticklabels=labels,
-                cbar_kws={"label": "Count"})
-    plt.title("Confusion Matrix")
-    plt.xlabel("Predicted Label")
-    plt.ylabel("True Label")
-    plt.tight_layout()
-    plt.savefig(os.path.join(PLOT_DIR, fname), dpi=300)
-    plt.close()
 
-# ---- helper ----
-def _style_axes(title, xlabel, ylabel):
-    plt.title(title, fontsize=14)
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
-    plt.grid(True, linestyle="--", alpha=0.6)
+    plt.title('Model Performance Across Congress Years')
+    plt.xlabel('Congress Year')
+    plt.ylabel('Score')
+    plt.grid(True)
+    plt.legend()
     plt.tight_layout()
 
+    os.makedirs(output_dir, exist_ok=True)
+    plot_path = os.path.join(output_dir, "performance_metrics_across_years.png")
+    plt.savefig(plot_path)
+    print(f"Performance metrics plot saved to {plot_path}")
+    plt.close()
+
+
+def plot_confusion_matrix(json_filepath: str, output_dir: str = "plots"):
+    """
+    Plots a confusion matrix from a JSON log file.
+
+    Args:
+        json_filepath (str): The path to the JSON file containing the confusion matrix.
+        output_dir (str): Directory to save the plot. Defaults to "plots".
+    """
+    if not os.path.exists(json_filepath):
+        print(f"Error: JSON log not found at {json_filepath}")
+        return
+
+    with open(json_filepath, 'r') as f:
+        results = json.load(f)
+
+    if "confusion_matrix" not in results or "labels" not in results:
+        print(f"Error: 'confusion_matrix' or 'labels' not found in {json_filepath}")
+        return
+
+    cm = results["confusion_matrix"]
+    labels = results["labels"]
+    year = results.get("year", "Unknown Year") # Get year for title
+
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=labels, yticklabels=labels)
+    plt.title(f'Confusion Matrix for Congress {year}')
+    plt.xlabel('Predicted Label')
+    plt.ylabel('True Label')
+    plt.tight_layout()
+
+    os.makedirs(output_dir, exist_ok=True)
+    plot_path = os.path.join(output_dir, f"confusion_matrix_{year}.png")
+    plt.savefig(plot_path)
+    print(f"Confusion matrix plot for {year} saved to {plot_path}")
+    plt.close()
+
+if __name__ == '__main__':
+    # Example Usage (assuming you have these files)
+    # plot_performance_metrics("logs/tfidf_svm_performance.csv")
+    # plot_confusion_matrix("logs/tfidf_results_079.json")
+    pass # Remove pass and uncomment lines above to test

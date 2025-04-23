@@ -4,6 +4,7 @@ import joblib
 import nltk
 import json
 import time
+import numpy as np
 from pathlib import Path
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.svm import LinearSVC
@@ -11,6 +12,8 @@ from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, confusion_m
 from sklearn.model_selection import train_test_split
 from pipeline_utils import preprocess_df_for_tfidf
 from config_loader import load_config
+from pipeline_utils import encode_labels
+from plotting_utils import plot_performance_metrics, plot_confusion_matrix
 
 #loading config
 config_path = Path(__file__).parent.parent / "config" / "svm_config.yaml"
@@ -38,7 +41,7 @@ def run_tfidf_pipeline(congress_year: str, config: dict):
         df = pd.read_csv(input_path)
         print("Preprocessing speeches...")
         start = time.time()
-        clean_df = preprocess_df_for_tfidf(df, text_col="speech")
+        clean_df, removed_short_speeches_count, removed_duplicate_speeches_count = preprocess_df_for_tfidf(df, text_col="speech") # added clip count
         timing["preprocessing_sec"] = round(time.time() - start, 2)
         print(f"Preprocessing complete. {len(clean_df)} speeches after cleaning.")
 
@@ -48,7 +51,11 @@ def run_tfidf_pipeline(congress_year: str, config: dict):
         clean_df.to_csv(processed_path, index=False)
 
     X = clean_df["speech"]
-    y = clean_df["party"]
+    le, y = encode_labels(
+    labels       = clean_df["party"],
+    encoder_path = f"models/label_encoder_{congress_year}.pkl",
+    )
+    
 
     # Train/test split
     start = time.time()
@@ -77,22 +84,27 @@ def run_tfidf_pipeline(congress_year: str, config: dict):
 
     # Evaluate
     start = time.time()
-    y_pred = svm.predict(X_test_vec)
-    accuracy = accuracy_score(y_test, y_pred)
-    f1 = f1_score(y_test, y_pred, average='weighted')
-    timing["evaluation_sec"] = round(time.time() - start, 2)
-    print(f"Accuracy: {accuracy:.3f}")
-    print(f"F1 Score: {f1:.3f}")
-    print("Confusion Matrix:\n", confusion_matrix(y_test, y_pred))
 
-    auc = ""
-    if len(set(y)) == 2:
-        from sklearn.preprocessing import LabelBinarizer
-        lb = LabelBinarizer()
-        y_test_bin = lb.fit_transform(y_test)
-        y_pred_bin = lb.transform(y_pred)
-        auc = roc_auc_score(y_test_bin, y_pred_bin)
-        print(f"AUC: {auc:.3f}")
+    # Hard‑label predictions (still needed for accuracy / F1 / confusion matrix)
+    y_pred = svm.predict(X_test_vec)
+
+    # Classic metrics
+    accuracy = accuracy_score(y_test, y_pred)
+    f1       = f1_score(y_test, y_pred, average="weighted")
+    #ROC‑AUC
+    auc = "NA"
+    if len(set(y)) == 2:                              # binary task only
+        decision_scores = svm.decision_function(X_test_vec)   # shape (n_samples,)
+        auc = roc_auc_score(y_test, decision_scores)  # y_test is already 0/1 ints
+
+    timing["evaluation_sec"] = round(time.time() - start, 2)
+
+    # Print metrics
+    print(f"Accuracy : {accuracy:.3f}")
+    print(f"F1 Score : {f1:.3f}")
+    if auc != "NA":
+        print(f"ROC‑AUC  : {auc:.3f}")
+    print("Confusion Matrix:\n", confusion_matrix(y_test, y_pred))
 
     # Log results
     log_path = "logs/tfidf_svm_performance.csv"
@@ -103,30 +115,37 @@ def run_tfidf_pipeline(congress_year: str, config: dict):
     with open(log_path, "a") as f:
         f.write(f"{congress_year},{accuracy:.4f},{f1:.4f},{auc if auc else 'NA'}\n")
 
+    # le.classes_ is an ndarray like array(['D', 'R'], dtype='<U1')
+    label_names = le.classes_.tolist()          
+
     # Save JSON log
     cm = confusion_matrix(y_test, y_pred).tolist()
     result_json = {
+        "removed_short_speeches": removed_short_speeches_count,
+        "removed_duplicate_speeches": removed_duplicate_speeches_count,
         "year": congress_year,
         "accuracy": round(accuracy, 4),
         "f1_score": round(f1, 4),
         "auc": round(auc, 4) if auc else "NA",
         "confusion_matrix": cm,
-        "labels": list(set(y_test))
+        "labels": label_names
     }
 
     timing["total_sec"] = round(time.time() - start_total, 2)
     result_json.update(timing)
-
+    
     with open(f"logs/tfidf_results_{congress_year}.json", "w") as jf:
         json.dump(result_json, jf, indent=4)
-
+        
+    plot_confusion_matrix(f"logs/tfidf_results_{congress_year}.json")
 
 if __name__ == "__main__":
     config_path = Path(__file__).parent.parent / "config" / "svm_config.yaml"
     config = load_config(config_path)
-    congress_years = [f"{i:03}" for i in range(79, 82)]
+    congress_years = [f"{i:03}" for i in range(79, 81)]
     for year in congress_years:
         try:
             run_tfidf_pipeline(year, config)
         except FileNotFoundError:
             print(f"⚠️  Skipping Congress {year}: CSV file not found.")
+    plot_performance_metrics("logs/tfidf_svm_performance.csv")

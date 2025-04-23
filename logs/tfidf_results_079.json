@@ -1,8 +1,10 @@
 {
+    "removed_short_speeches": 44967,
+    "removed_duplicate_speeches": 1873,
     "year": "079",
     "accuracy": 0.6454,
     "f1_score": 0.6454,
-    "auc": 0.6449,
+    "auc": 0.7088,
     "confusion_matrix": [
         [
             2887,
@@ -14,12 +16,13 @@
         ]
     ],
     "labels": [
-        "R",
-        "D"
+        "D",
+        "R"
     ],
-    "split_sec": 0.17,
-    "vectorization_sec": 23.83,
-    "training_sec": 2.44,
-    "evaluation_sec": 0.07,
-    "total_sec": 28.18
+    "preprocessing_sec": 838.72,
+    "split_sec": 0.07,
+    "vectorization_sec": 32.5,
+    "training_sec": 2.69,
+    "evaluation_sec": 0.02,
+    "total_sec": 878.94
 }

@@ -2,7 +2,7 @@
     "year": "080",
     "accuracy": 0.6786,
     "f1_score": 0.6707,
-    "auc": 0.6333,
+    "auc": 0.7072,
     "confusion_matrix": [
         [
             1042,
@@ -14,12 +14,12 @@
         ]
     ],
     "labels": [
-        "R",
-        "D"
+        "D",
+        "R"
     ],
-    "split_sec": 0.04,
-    "vectorization_sec": 20.98,
-    "training_sec": 1.62,
-    "evaluation_sec": 0.06,
-    "total_sec": 23.31
+    "split_sec": 0.05,
+    "vectorization_sec": 26.18,
+    "training_sec": 2.54,
+    "evaluation_sec": 0.02,
+    "total_sec": 29.71
 }
