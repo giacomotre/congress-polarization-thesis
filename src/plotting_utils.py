@@ -6,7 +6,7 @@ import os
 
 def plot_performance_metrics(csv_filepath: str, output_dir: str = "plots"):
     """
-    Plots accuracy, F1-score, and AUC from a CSV log file across years.
+    Plots accuracy, F1-score, and AUC from a CSV log file across years as separate plots.
 
     Args:
         csv_filepath (str): The path to the CSV file containing performance metrics.
@@ -22,32 +22,55 @@ def plot_performance_metrics(csv_filepath: str, output_dir: str = "plots"):
         print(f"No data to plot in {csv_filepath}")
         return
 
-    # Ensure 'year' column is treated as categorical or string for plotting
-    df['year'] = df['year'].astype(str)
+    # Ensure 'year' column is treated as numeric for correct plotting order
+    df['year'] = pd.to_numeric(df['year'])
 
-    plt.figure(figsize=(12, 6))
-
-    plt.plot(df['year'], df['accuracy'], marker='o', linestyle='-', label='Accuracy')
-    plt.plot(df['year'], df['f1_score'], marker='o', linestyle='-', label='F1 Score')
-    # Only plot AUC if it exists and is not 'NA'
-    if 'auc' in df.columns and df['auc'].dtype != object:
-        # Convert 'NA' strings to NaN for plotting
-        df['auc'] = pd.to_numeric(df['auc'], errors='coerce')
-        plt.plot(df['year'], df['auc'], marker='o', linestyle='-', label='AUC')
-
-
-    plt.title('Model Performance Across Congress Years')
+    # --- Plot Accuracy ---
+    plt.figure(figsize=(8, 5))
+    plt.plot(df['year'], df['accuracy'], marker='o', linestyle='-')
+    plt.title('Accuracy Across Congress Years')
     plt.xlabel('Congress Year')
-    plt.ylabel('Score')
+    plt.ylabel('Accuracy')
     plt.grid(True)
-    plt.legend()
+    plt.xticks(df['year']) # Ensure all years are shown on x-axis
     plt.tight_layout()
-
     os.makedirs(output_dir, exist_ok=True)
-    plot_path = os.path.join(output_dir, "performance_metrics_across_years.png")
-    plt.savefig(plot_path)
-    print(f"Performance metrics plot saved to {plot_path}")
+    plot_path_acc = os.path.join(output_dir, "accuracy_across_years.png")
+    plt.savefig(plot_path_acc)
+    print(f"Accuracy plot saved to {plot_path_acc}")
     plt.close()
+
+    # --- Plot F1 Score ---
+    plt.figure(figsize=(8, 5))
+    plt.plot(df['year'], df['f1_score'], marker='o', linestyle='-', color='orange')
+    plt.title('F1 Score Across Congress Years')
+    plt.xlabel('Congress Year')
+    plt.ylabel('F1 Score')
+    plt.grid(True)
+    plt.xticks(df['year']) # Ensure all years are shown on x-axis
+    plt.tight_layout()
+    os.makedirs(output_dir, exist_ok=True)
+    plot_path_f1 = os.path.join(output_dir, "f1_score_across_years.png")
+    plt.savefig(plot_path_f1)
+    print(f"F1 Score plot saved to {plot_path_f1}")
+    plt.close()
+
+    # --- Plot AUC ---
+    if 'auc' in df.columns and df['auc'].dtype != object:
+        df['auc'] = pd.to_numeric(df['auc'], errors='coerce')
+        plt.figure(figsize=(8, 5))
+        plt.plot(df['year'], df['auc'], marker='o', linestyle='-', color='green')
+        plt.title('AUC Across Congress Years')
+        plt.xlabel('Congress Year')
+        plt.ylabel('AUC')
+        plt.grid(True)
+        plt.xticks(df['year']) # Ensure all years are shown on x-axis
+        plt.tight_layout()
+        os.makedirs(output_dir, exist_ok=True)
+        plot_path_auc = os.path.join(output_dir, "auc_across_years.png")
+        plt.savefig(plot_path_auc)
+        print(f"AUC plot saved to {plot_path_auc}")
+        plt.close()
 
 
 def plot_confusion_matrix(json_filepath: str, output_dir: str = "plots"):
