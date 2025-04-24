@@ -212,7 +212,7 @@ def run_tfidf_pipeline(congress_year: str, config: dict):
 if __name__ == "__main__":
     config_path = Path(__file__).parent.parent / "config" / "svm_config.yaml"
     config = load_config(config_path)
-    congress_years = [f"{i:03}" for i in range(79, 81)]
+    congress_years = [f"{i:03}" for i in range(79, 112)]
     for year in congress_years:
         try:
             run_tfidf_pipeline(year, config)
