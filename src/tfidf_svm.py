@@ -33,26 +33,22 @@ def run_tfidf_pipeline(congress_year: str, config: dict):
     input_path = f"data/merged/house_db/house_merged_{congress_year}.csv"
     processed_path = f"data/processed/speeches_tfidf_{congress_year}.csv"
     
-    # Corrected: Initialize counts before the if/else block
+    # Initialize counts 
     removed_short_speeches_count = 0
     removed_duplicate_speeches_count = 0
 
-    if Path(processed_path).exists():
-        print("Found cached clean CSV – loading instead of preprocessing")
-        clean_df = pd.read_csv(processed_path)
-    else:
-        # Load and preprocess
-        df = pd.read_csv(input_path)
-        print("Preprocessing speeches...")
-        start = time.time()
-        clean_df, removed_short_speeches_count, removed_duplicate_speeches_count = preprocess_df_for_tfidf(df, text_col="speech") # added clip count
-        timing["preprocessing_sec"] = round(time.time() - start, 2)
-        print(f"Preprocessing complete. {len(clean_df)} speeches after cleaning.")
+    # Load and preprocess
+    df = pd.read_csv(input_path)
+    print("Preprocessing speeches...")
+    start = time.time()
+    clean_df, removed_short_speeches_count, removed_duplicate_speeches_count = preprocess_df_for_tfidf(df, text_col="speech") # added clip count
+    timing["preprocessing_sec"] = round(time.time() - start, 2)
+    print(f"Preprocessing complete. {len(clean_df)} speeches after cleaning.")
 
-        # Save cleaned text
-        os.makedirs("data/processed", exist_ok=True)
-        os.makedirs("models", exist_ok=True)
-        clean_df.to_csv(processed_path, index=False)
+    # Save cleaned text
+    os.makedirs("data/processed", exist_ok=True)
+    os.makedirs("models", exist_ok=True)
+    clean_df.to_csv(processed_path, index=False)
 
     # ------ Leave-out speaker approach split -------
 
