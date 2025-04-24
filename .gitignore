@@ -1,2 +1,12 @@
 /data/*
 !./data/.gitkeep
+/outputs/*
+!./doutputs/.gitkeep
+/plots/*
+!./plots/.gitkeep
+/models/*
+!./models/.gitkeep
+/logs/*
+!./logs/.gitkeep
+__pycache__/
+*.pyc
