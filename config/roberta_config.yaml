@@ -1,0 +1,32 @@
+# Configuration for RoBERTa Classification Pipeline (Parameters only)
+
+# --- Model and Training Parameters ---
+model_params:
+  model_name: roberta-base
+  num_labels: 2 # Democrat, Republican
+  max_token_len: 512
+  batch_size: 8
+  num_epochs: 5 # Start small, usually 3-5 epochs are enough for finetuning BERT-likes
+  learning_rate: 5.0e-5 # Note: scientific notation in YAML needs to be quoted if starting with e or E
+  weight_decay: 0.0
+
+# --- Data Splitting Parameters ---
+split_params:
+  test_size: 0.2    # Fraction of speakers for the test set (e.g., 0.2 means 20% speakers for test)
+  validation_size: 0.25 # Fraction of *remaining* speakers for validation set (from train_val group)
+  random_state: 42 # For reproducibility
+
+# --- Data Filtering Parameters ---
+filter_params:
+  min_word_count: 15 # Minimum words required per speech
+  party_map: # Mapping party strings to numerical labels
+    D: 0
+    R: 1
+
+# --- Processing Range ---
+# Specify the start and end year for processing (inclusive)
+processing_range:
+  start_year: 79
+  end_year: 80 # Example: Process from Congress 79 to 111
+
+

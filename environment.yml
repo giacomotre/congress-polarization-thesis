@@ -11,6 +11,8 @@ dependencies:
   - pip
   - seaborn
   - matplotlib
+  - torch
+  - transformers
   - pip:
     - transformers
     - spacy==3.8.5
