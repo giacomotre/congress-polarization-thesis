@@ -3,27 +3,50 @@ import time
 import json
 import pandas as pd
 from pathlib import Path
+from collections import Counter # Import Counter for class distribution logging
 
 import torch
 import torch.nn as nn
-from torch.optim import AdamW
+from torch.optim import AdamW # Explicitly import AdamW
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 from sklearn.model_selection import train_test_split # Ensure this is imported
+import numpy as np # Import numpy for potential use in confusion matrix handling
 
-# Import your custom modules
-from dataset import CongressSpeechDataset # Assuming dataset.py is in the same directory or accessible
-from roberta_model import RobertaClassifier     # Assuming model.py is in the same directory or accessible
-from engine import train_epoch, evaluate_epoch # Assuming engine.py is in the same directory or accessible
-from config_loader import load_config
-from pipeline_utils import filter_short_speeches, remove_duplicates, encode_labels_with_map
 
 # --- Direct Imports for Config Loader and Utilities ---
-config_path = Path(__file__).parent.parent / "config" / "roberta_config.yaml"
-config = load_config(config_path)
+# Assuming config_loader.py and pipeline_utils.py are located as per your provided code structure
+# Keeping your import structure as provided
+try:
+    from config_loader import load_config
+    from pipeline_utils import filter_short_speeches, remove_duplicates, encode_labels_with_map
+    # Import your other custom modules as you had them
+    from dataset import CongressSpeechDataset
+    from roberta_model import RobertaClassifier
+    from engine import train_epoch, evaluate_epoch
+except ImportError as e:
+    print(f"Error importing necessary modules: {e}")
+    print("Please ensure dataset.py, roberta_model.py, engine.py, config_loader.py, and pipeline_utils.py are accessible in your Python path.")
+    exit()
+
 
 # Import plotting functions
 from plotting_utils import plot_performance_metrics, plot_confusion_matrix # Assuming plotting_utils.py is accessible
+
+
+# --- Direct Imports for Config Loading ---
+# Keeping your config loading logic as provided
+config_path = Path(__file__).parent.parent / "config" / "roberta_config.yaml"
+try:
+    config = load_config(config_path)
+    print("Loaded configuration parameters:")
+    print(json.dumps(config, indent=4)) # Print loaded config for verification
+except FileNotFoundError:
+    print(f"Error: Config file not found at {config_path}")
+    exit() # Exit if config file is missing
+except Exception as e:
+    print(f"Error loading config file: {e}")
+    exit()
 
 
 # --- Directory Paths (Defined directly in script) ---
@@ -61,6 +84,7 @@ def run_roberta_pipeline(congress_year: str, config: dict):
 
     MIN_WORD_COUNT = config['filter_params']['min_word_count']
     PARTY_MAP = config['filter_params']['party_map']
+    REVERSE_PARTY_MAP = {v: k for k, v in PARTY_MAP.items()} # Create reverse map for logging
 
 
     # --- Paths (Defined directly in script, not from config) ---
@@ -74,6 +98,7 @@ def run_roberta_pipeline(congress_year: str, config: dict):
     year_results_json_path = LOG_DIR / f"roberta_results_{congress_year}.json"
     model_save_path = MODELS_DIR / f"roberta_classifier_{congress_year}.pth" # Optional: path to save model
 
+
     # --- Device Setup ---
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
@@ -85,19 +110,23 @@ def run_roberta_pipeline(congress_year: str, config: dict):
     initial_count = len(df)
     print(f"  - Loaded {initial_count} initial rows.")
 
-    # filter_short_speeches also returns a tuple (df, count)
-    df_filtered, _ = filter_short_speeches(df, min_words=MIN_WORD_COUNT) # Unpack and ignore count if not needed here
+    # Apply filtering (min word count, duplicates) using imported utility functions
+    # Ensure these functions are correctly imported from pipeline_utils
+    # Assuming filter_short_speeches returns tuple (df, count)
+    df_filtered, removed_short_speeches_count = filter_short_speeches(df, min_words=MIN_WORD_COUNT)
+    print(f"  - Removed {removed_short_speeches_count} speeches shorter than {MIN_WORD_COUNT} words.")
 
-    # remove_duplicates also returns a tuple (df, count)
-    df_filtered, removed_duplicate_count = remove_duplicates(df_filtered) # Unpack the DataFrame and the count
-    print(f"  - Removed {removed_duplicate_count} duplicate speeches.") # Optional: print the count
+    # Assuming remove_duplicates returns tuple (df, count)
+    df_filtered, removed_duplicate_count = remove_duplicates(df_filtered)
+    print(f"  - Removed {removed_duplicate_count} duplicate speeches.")
 
-    # Now df_filtered is the actual DataFrame
+
     # Handle missing speeches or parties BEFORE mapping and splitting
     df_filtered.dropna(subset=['speech', 'party'], inplace=True)
-    print(f"  - Removed rows with missing speech or party. Remaining: {len(df_filtered)}")
+    print(f"  - Removed rows with missing speech or party. Remaining: {len(df_filtered)}")
 
     # Map party labels to integers using imported utility function and config party_map
+    # Assuming encode_labels_with_map takes df and party_map and returns df with 'label'
     df_processed = encode_labels_with_map(df_filtered, party_map=PARTY_MAP)
     print(f"  - Mapped party labels. Final sample count for split: {len(df_processed)}")
 
@@ -123,8 +152,8 @@ def run_roberta_pipeline(congress_year: str, config: dict):
 
     # Split train_val speakers into train and validation sets using config values
     if len(train_val_speaker) < 2: # Need at least 2 speakers in train_val for validation split
-        print(f"⚠️  Skipping Congress {congress_year}: Not enough unique speakers ({len(train_val_speaker)}) in train_val set for validation split.")
-        return
+         print(f"⚠️  Skipping Congress {congress_year}: Not enough unique speakers ({len(train_val_speaker)}) in train_val set for validation split.")
+         return
 
 
     train_speaker, val_speaker = train_test_split(
@@ -142,13 +171,31 @@ def run_roberta_pipeline(congress_year: str, config: dict):
     print(f"  - Validation speakers: {len(val_speaker)}, Samples: {len(val_df)}")
     print(f"  - Test speakers: {len(test_speaker)}, Samples: {len(test_df)}")
 
+    # --- Add Class Distribution Logging ---
+    print("  - Class distribution after split:")
+    train_counts = Counter(train_df['party'])
+    val_counts = Counter(val_df['party'])
+    test_counts = Counter(test_df['party'])
+    print(f"    Train: {dict(train_counts)}")
+    print(f"    Validation: {dict(val_counts)}")
+    print(f"    Test: {dict(test_counts)}")
+    # -------------------------------------
+
+
     split_time = time.time() - start_time
     print(f"Split complete in {split_time:.2f} seconds.")
 
-    # Check if any split is empty
+    # Check if any split is empty or has only one class (for binary classification)
     if len(train_df) == 0 or len(val_df) == 0 or len(test_df) == 0:
         print(f"⚠️  Skipping Congress {congress_year}: One or more data splits resulted in zero samples.")
         return
+    # Check if both classes are present in the training data AFTER the split
+    if len(train_df['label'].unique()) < 2:
+         # Identify the single class present for better logging
+         single_class = train_df['party'].iloc[0] if not train_df.empty else 'N/A'
+         print(f"⚠️  Skipping Congress {congress_year}: Only one class ({single_class}) present in training data after split.")
+         return
+
 
     # --- Dataset and DataLoader Creation ---
     print("Creating Datasets and DataLoaders...")
@@ -180,7 +227,33 @@ def run_roberta_pipeline(congress_year: str, config: dict):
 
     # Use config values for optimizer parameters
     optimizer = AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-    criterion = nn.CrossEntropyLoss() # Standard for classification
+
+    # --- Calculate and Use Weighted Loss for Imbalance ---
+    # Calculate class weights for CrossEntropyLoss based on training data distribution
+    train_labels = train_df['label'].values # Get numerical labels from the training DataFrame
+    class_counts = Counter(train_labels)
+    # Ensure counts for all expected labels are present, even if 0
+    # This is important for creating the weight tensor in the correct order (0, 1)
+    sorted_labels = sorted(PARTY_MAP.values()) # Get the sorted numerical labels (e.g., [0, 1])
+    class_counts_sorted = [class_counts.get(label, 0) for label in sorted_labels]
+
+
+    # Calculate weights: inverse frequency (total_samples / class_count)
+    total_samples = sum(class_counts_sorted)
+    # Avoid division by zero if a class is missing entirely in the training set
+    # If a class has 0 samples in the training set, its weight should be 0
+    # A common approach is to use 1 / count, then normalize.
+    # Let's use the total_samples / count approach, handling zero counts.
+    class_weights = [total_samples / count if count > 0 else 0 for count in class_counts_sorted]
+
+    # Convert weights to a PyTorch tensor and move to device
+    class_weights_tensor = torch.tensor(class_weights, dtype=torch.float).to(device)
+
+    # Use weighted CrossEntropyLoss
+    criterion = nn.CrossEntropyLoss(weight=class_weights_tensor)
+    print(f"  - Using weighted CrossEntropyLoss with weights: {class_weights_tensor.cpu().numpy()}")
+    # -------------------------------------------
+
 
     setup_time = time.time() - start_time
     print(f"Setup complete in {setup_time:.2f} seconds.")
@@ -200,7 +273,7 @@ def run_roberta_pipeline(congress_year: str, config: dict):
         print(f"  Train Loss: {train_loss:.4f}")
 
         # Evaluate on validation set after each epoch
-        val_metrics = evaluate_epoch(model, val_dataloader, criterion, device)
+        val_metrics = evaluate_epoch(model, val_dataloader, criterion, device) # Pass criterion
         print(f"  Validation Loss: {val_metrics['loss']:.4f}")
         print(f"  Validation Accuracy: {val_metrics['accuracy']:.4f}")
         print(f"  Validation F1 Score: {val_metrics['f1_score']:.4f}")
@@ -219,6 +292,7 @@ def run_roberta_pipeline(congress_year: str, config: dict):
     # --- Final Evaluation on Test Set ---
     print("Evaluating on test set...")
     start_time = time.time()
+    # Pass criterion to evaluate_epoch for test set as well
     test_metrics = evaluate_epoch(model, test_dataloader, criterion, device)
     evaluation_time = time.time() - start_time
     print(f"Evaluation complete in {evaluation_time:.2f} seconds.")
@@ -239,10 +313,18 @@ def run_roberta_pipeline(congress_year: str, config: dict):
     print(f"  Predicted -> {'  '.join(cm_label_names_print)}")
     # Print confusion matrix rows - need to align with cm_labels order
     cm_matrix_data = test_metrics['confusion_matrix'] # This is a list of lists from evaluate_epoch
-    for i, true_label_int in enumerate(sorted(cm_labels)):
-        # Assuming cm_matrix_data rows correspond to sorted cm_labels
-         row_data = cm_matrix_data[i] if i < len(cm_matrix_data) else [0] * len(cm_labels) # Handle potential size mismatch
-         print(f"True {party_names.get(true_label_int, str(true_label_int))}({true_label_int}) | {'  '.join(map(str, row_data))}")
+    # Ensure cm_matrix_data has the expected shape based on cm_labels
+    expected_cm_shape = (len(cm_labels), len(cm_labels))
+
+    # Add a check for the shape before attempting to print row by row
+    if len(cm_matrix_data) != expected_cm_shape[0] or (len(cm_matrix_data) > 0 and len(cm_matrix_data[0]) != expected_cm_shape[1]):
+        print("Warning: Confusion matrix shape mismatch. Printing raw matrix data.")
+        print(cm_matrix_data)
+    else:
+        # Print rows aligned with sorted cm_labels
+        for i, true_label_int in enumerate(sorted(cm_labels)):
+             row_data = cm_matrix_data[i]
+             print(f"True {party_names.get(true_label_int, str(true_label_int))}({true_label_int}) | {'  '.join(map(str, row_data))}")
 
 
     # --- Logging Results ---
@@ -288,7 +370,6 @@ def run_roberta_pipeline(congress_year: str, config: dict):
 
     total_pipeline_time = time.time() - start_total_time
     print(f"--- Pipeline for Congress {congress_year} finished in {total_pipeline_time:.2f} seconds ---\n")
-
 
 
 # --- Main Execution Block ---

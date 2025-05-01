@@ -12,7 +12,7 @@ model_params:
 
 # --- Data Splitting Parameters ---
 split_params:
-  test_size: 0.2    # Fraction of speakers for the test set (e.g., 0.2 means 20% speakers for test)
+  test_size: 0.15    # Fraction of speakers for the test set (e.g., 0.2 means 20% speakers for test)
   validation_size: 0.25 # Fraction of *remaining* speakers for validation set (from train_val group)
   random_state: 42 # For reproducibility
 

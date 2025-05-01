@@ -10,3 +10,5 @@
 !./logs/.gitkeep
 __pycache__/
 *.pyc
+/roberta_output/*
+!./roberta_output/.gitkeep
