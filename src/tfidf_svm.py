@@ -6,203 +6,299 @@ import json
 import time
 import numpy as np
 from pathlib import Path
+from collections import Counter
+from sklearn.pipeline import Pipeline
+from sklearn.model_selection import GridSearchCV
+from sklearn.preprocessing import FunctionTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.svm import LinearSVC
-from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, confusion_matrix
+from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, confusion_matrix, classification_report
 from sklearn.model_selection import train_test_split
-from pipeline_utils import preprocess_df_for_tfidf
+
 from config_loader import load_config
-from pipeline_utils import encode_labels
+from pipeline_utils import encode_labels_with_map, clean_text_for_tfidf
 from plotting_utils import plot_performance_metrics, plot_confusion_matrix
 
-#loading config
-config_path = Path(__file__).parent.parent / "config" / "svm_config.yaml"
-config = load_config(config_path)
-print("Loaded config:", json.dumps(config, indent=4))
-max_features = config.get("tfidf_max_features", 10000)
-ngram_range = tuple(config.get("ngram_range", [1, 2]))
-test_size = config.get("test_size", 0.2)
-random_state = config.get("random_state", 42)
 
+# ------ Loading Config -------
+CONFIG_PATH = Path(__file__).parent.parent / "config" / "svm_config.yaml"
+config = load_config(CONFIG_PATH)
+print("Loaded config:", json.dumps(config, indent=4))
+
+MAX_FEATURES = config.get("tfidf_max_features", 10000)
+NGRAM_RANGE = tuple(config.get("ngram_range", [1, 2]))
+TEST_SIZE = config['split_params']['test_size']
+VALIDATION_SIZE = config['split_params']['validation_size']
+RANDOM_STATE = config['split_params']['random_state']
+PARTY_MAP = config['party_map']
+
+
+# ------ Main Loop -------
 def run_tfidf_pipeline(congress_year: str, config: dict):
     print(f"\n Running pipeline for Congress {congress_year}")
     timing = {}
     start_total = time.time()
 
-    # Paths
+    # ------ Data Loading -------   
     input_path = f"data/merged/house_db/house_merged_{congress_year}.csv"
-    processed_path = f"data/processed/speeches_tfidf_{congress_year}.csv"
-    
-    # Initialize counts 
-    removed_short_speeches_count = 0
-    removed_duplicate_speeches_count = 0
-
-    # Load and preprocess
     df = pd.read_csv(input_path)
-    print("Preprocessing speeches...")
-    start = time.time()
-    clean_df, removed_short_speeches_count, removed_duplicate_speeches_count = preprocess_df_for_tfidf(df, text_col="speech") # added clip count
-    timing["preprocessing_sec"] = round(time.time() - start, 2)
-    print(f"Preprocessing complete. {len(clean_df)} speeches after cleaning.")
 
-    # Save cleaned text
-    os.makedirs("data/processed", exist_ok=True)
-    os.makedirs("models", exist_ok=True)
-    clean_df.to_csv(processed_path, index=False)
+    # ------ Data Splitting - Leave-out speaker approach -------
+    print("Performing leave-out speaker split...")
+    start_time = time.time()
 
-    # ------ Leave-out speaker approach split -------
+    unique_speakers = df['speakerid'].unique()
 
-    unique_speakers = clean_df['speakerid'].unique()
+    # Split speakers into train_val and test sets using config values
+    train_val_speaker, test_speaker = train_test_split(
+        unique_speakers,
+        test_size=TEST_SIZE,
+        random_state=RANDOM_STATE
+    )
 
-    train_val_speaker, test_speaker = train_test_split(unique_speakers,
-                                                    test_size=config.get("test_size", 0.2),
-                                                    random_state=config.get("random_state", 42)
-                                                    )
+    train_speaker, val_speaker = train_test_split(
+        train_val_speaker,
+        test_size=VALIDATION_SIZE, 
+        random_state=RANDOM_STATE
+    )
 
-    validation_size = config.get("validation_size", 0.25)
+    # Create dataframes based on speaker IDs
+    train_df = df[df["speakerid"].isin(train_speaker)].reset_index(drop=True)
+    val_df = df[df["speakerid"].isin(val_speaker)].reset_index(drop=True)
+    test_df = df[df["speakerid"].isin(test_speaker)].reset_index(drop=True)
 
-    train_speaker, val_speaker = train_test_split(train_val_speaker,
-                                                test_size= validation_size,
-                                                random_state=config.get("random_state", 42)
-                                                )
+    print(f"  - Train speakers: {len(train_speaker)}, Samples: {len(train_df)}")
+    print(f"  - Validation speakers: {len(val_speaker)}, Samples: {len(val_df)}")
+    print(f"  - Test speakers: {len(test_speaker)}, Samples: {len(test_df)}")
+    
+    # Separate features (X) and labels (y)
+    X_train = train_df["speech"]
+    y_train = train_df["party"] 
+    X_val = val_df["speech"]
+    y_val = val_df["party"]   
+    X_test = test_df["speech"]
+    y_test = test_df["party"]     
 
-    train_df = clean_df[clean_df["speakerid"].isin(train_speaker)]
-    val_df = clean_df[clean_df["speakerid"].isin(val_speaker)]
-    test_df = clean_df[clean_df["speakerid"].isin(test_speaker)]
+    # Class Distribution Logging 
+    print("  - Class distribution after split:")
+    train_counts = Counter(train_df['party'])
+    val_counts = Counter(val_df['party'])
+    test_counts = Counter(test_df['party'])
+    print(f"    Train: {dict(train_counts)}")
+    print(f"    Validation: {dict(val_counts)}")
+    print(f"    Test: {dict(test_counts)}")
 
-    # Corrected lines: Assign the Series directly
-    X_train_df = train_df["speech"]
-    y_train_df = train_df["party"]
-    X_val_df = val_df["speech"]
-    y_val_df = val_df["party"]
-    X_test_df = test_df["speech"]
-    y_test_df = test_df["party"]
+    split_time = time.time() - start_time
+    print(f"Split complete in {split_time:.2f} seconds.")
+    
+    # ------ Encoding -------
+    print("Encoding labels using encode_labels_with_map...")
 
+    # Create temporary DataFrames to use your function
+    train_df_encoded = pd.DataFrame({'party': y_train})
+    val_df_encoded = pd.DataFrame({'party': y_val})
+    test_df_encoded = pd.DataFrame({'party': y_test})
 
-    le, y_train = encode_labels(labels=y_train_df, encoder_path=f"models/label_encoder_{congress_year}.pkl")
-    _, y_val = encode_labels(labels=y_val_df, encoder_path=f"models/label_encoder_{congress_year}.pkl")
-    _, y_test = encode_labels(labels=y_test_df, encoder_path=f"models/label_encoder_{congress_year}.pkl")
+    # Apply the encoding function
+    y_train_encoded = encode_labels_with_map(train_df_encoded, PARTY_MAP)['label']
+    y_val_encoded = encode_labels_with_map(val_df_encoded, PARTY_MAP)['label']
+    y_test_encoded = encode_labels_with_map(test_df_encoded, PARTY_MAP)['label']
 
-    # Vectorize
-    print("Vectorizing text with TF-IDF...")
-    start = time.time()
-    tfidf = TfidfVectorizer(max_features=max_features, ngram_range=ngram_range)
-    # Corrected lines: Use the Series directly
-    X_train_vec = tfidf.fit_transform(X_train_df)
-    X_val_vec = tfidf.transform(X_val_df)
-    X_test_vec = tfidf.transform(X_test_df)
-    timing["vectorization_sec"] = round(time.time() - start, 2)
-    print("Vectorization complete.")
+    # Convert back to Series if needed for consistency with scikit-learn inputs
+    y_train_encoded = pd.Series(y_train_encoded)
+    y_val_encoded = pd.Series(y_val_encoded)
+    y_test_encoded = pd.Series(y_test_encoded)
 
-    # Train + optimizing
-    print("Training Linear SVM model...")
-    start = time.time()
+    print("Labels encoded.") 
+    
+    # --- Pipeline ---
+    #Text cleaning, Vectorization and
 
-    best_accuracy = 0
-    best_params = {}
+    # Define the cleaning step using FunctionTransformer
+    #FuntionTransformer is an utility that let you integrate into the pipeline a user func
+    # This wraps your clean_text_for_tfidf function for use in a pipeline.
+    # We use a lambda function and .apply() assuming clean_text_for_tfidf works on a single string
+    # and X_train etc are pandas Series. validate=False might be needed for Series input.
+    cleaning_step = FunctionTransformer(lambda x: x.apply(clean_text_for_tfidf), validate=False)
 
-    for current_max_features in [5000, 10000, 20000]:
-        for current_ngram_range in [(1,1), (1, 2), (2, 2)]:
-            print(f"Testing parameters: max_features={current_max_features}, ngram_range={current_ngram_range}")
+    # Define the TF-IDF vectorization step
+    tfidf_step = TfidfVectorizer() # Parameters like max_features, ngram_range will be tuned
 
-            tfidf_tuned = TfidfVectorizer(max_features=current_max_features, ngram_range=current_ngram_range)
-            # Corrected lines: Use the Series directly
-            X_train_vec_tuned = tfidf_tuned.fit_transform(X_train_df)
-            X_val_vec_tuned = tfidf_tuned.transform(X_val_df)
+    # Define the SVM model step
+    svm_step = LinearSVC() # Parameters like C can also be tuned
 
-            #Train with current parameters
-            svm_tuned = LinearSVC()
-            svm_tuned.fit(X_train_vec_tuned, y_train)
+    # Create the pipeline chaining the steps
+    pipeline = Pipeline([
+        ('cleaning', cleaning_step),
+        ('tfidf', tfidf_step),
+        ('svm', svm_step)
+    ])
 
-            # Evaluate on validation set
-            y_val_pred = svm_tuned.predict(X_val_vec_tuned)
-            current_accuracy = accuracy_score(y_val, y_val_pred)
+    print("Pipeline created with Cleaning, TF-IDF, and LinearSVC.")
 
-            print(f"Validation Accuracy: {current_accuracy:.4f}")
+    # --- Optimization (Hyperparameter Tuning) ---
+    print("Starting hyperparameter tuning using GridSearchCV...")
+    start_time_tuning = time.time()
 
-            # Check if current parameters are better
-            if current_accuracy > best_accuracy:
-                best_accuracy = current_accuracy
-                best_params = {"max_features": current_max_features, "ngram_range": current_ngram_range}
+    # Define the parameter grid for tuning
+    # Parameters are referenced by step_name__parameter_name
+    param_grid = {
+        'tfidf__max_features': [5000, 10000, 20000], # Example max_features values
+        'tfidf__ngram_range': [(1, 1), (1, 2), (2, 2)], # Example ngram_range values
+    }
 
-    print(f"Best parameters found: {best_params} with Validation Accuracy: {best_accuracy:.4f}")
+    # Create the GridSearchCV object
+    grid_search = GridSearchCV(pipeline, param_grid, cv=5, scoring='accuracy', verbose=1, n_jobs=-1) # n_jobs=-1 uses all available cores
 
-    timing["training_sec"] = round(time.time() - start, 2)
-    print("Model training and optimization complete.")
+    grid_search.fit(X_train, y_train_encoded)
 
-    # ------ Testing set  -------
-    start = time.time()
+    print(f"Hyperparameter tuning complete in {time.time() - start_time_tuning:.2f} seconds.")
+    print(f"Best parameters found: {grid_search.best_params_}")
+    print(f"Best cross-validation accuracy: {grid_search.best_score_:.4f}")
 
-    # Combine train and validation data
-    # Corrected lines: Concatenate the Series directly
-    X_train_val_df_combined = pd.concat([X_train_df, X_val_df])
-    y_train_val_df_combined = pd.concat([y_train_df, y_val_df])
+    # The best pipeline is now stored in grid_search.best_estimator_
+    best_pipeline = grid_search.best_estimator_
 
+    # --- 7. Final Model Training (on Combined Train/Validation Data) ---
+    print("Training final model (best pipeline) on combined train/validation data...")
+    start_time_final_train = time.time()
 
-    _, y_train_val = encode_labels(labels=y_train_val_df_combined, encoder_path=f"models/label_encoder_{congress_year}.pkl") # Re-encode combined labels
+    # Combine the ORIGINAL train and validation data (X)
+    X_train_val_combined = pd.concat([X_train, X_val]) # Assuming X_train, X_val are Series/DataFrames
 
-    # Re-vectorize combined data and test data with best parameters
-    tfidf_final = TfidfVectorizer(max_features=best_params["max_features"], ngram_range=best_params["ngram_range"])
-    # Corrected lines: Use the combined and test Series directly
-    X_train_val_vec = tfidf_final.fit_transform(X_train_val_df_combined)
-    X_test_vec_final = tfidf_final.transform(X_test_df)
+    # Combine the ENCODED train and validation labels (y)
+    y_train_val_combined_encoded = pd.concat([pd.Series(y_train_encoded).reset_index(drop=True),
+                                            pd.Series(y_val_encoded).reset_index(drop=True)]) # Concatenate encoded Series
 
-    # Train final model on combined data
-    svm_final = LinearSVC()
-    svm_final.fit(X_train_val_vec, y_train_val)
+    # Train the best pipeline on the combined ORIGINAL training and validation data and ENCODED labels.
+    final_pipeline = best_pipeline.fit(X_train_val_combined, y_train_val_combined_encoded)
 
-    # Evaluate on the test set
-    y_test_pred_final = svm_final.predict(X_test_vec_final)
-    final_accuracy = accuracy_score(y_test, y_test_pred_final)
-    final_f1 = f1_score(y_test, y_test_pred_final, average="weighted")
+    print(f"Final model training complete in {time.time() - start_time_final_train:.2f} seconds.")
 
-    # ------ Metrics  -------
+    # --- Testing on Test Data ---
+    print("Evaluating final model on test data...")
+    start_time_test = time.time()
 
-    #ROC-AUC
-    auc = "NA"
-    # Corrected lines: Use svm_final and X_test_vec_final for decision_function
-    if len(set(y_test)) == 2:                              # binary task only
-        decision_scores = svm_final.decision_function(X_test_vec_final)   # shape (n_samples,)
-        auc = roc_auc_score(y_test, decision_scores)  # y_test is already 0/1 ints
+    y_test_pred_final = final_pipeline.predict(X_test)
 
-    timing["evaluation_sec"] = round(time.time() - start, 2)
+    # Evaluate the predictions against the encoded test labels
+    final_accuracy = accuracy_score(y_test_encoded, y_test_pred_final)
+    # Use average='weighted' for f1_score in multi-class classification
+    final_f1_weighted = f1_score(y_test_encoded, y_test_pred_final, average='weighted')
 
-    # Print metrics
-    print(f"Accuracy : {final_accuracy:.3f}")
-    print(f"F1 Score : {final_f1:.3f}")
-    if auc != "NA":
-        print(f"ROC-AUC  : {auc:.3f}")
-    print("Confusion Matrix:\n", confusion_matrix(y_test, y_test_pred_final))
+    print(f"Evaluation complete in {time.time() - start_time_test:.2f} seconds.")
 
-    # Log results
+    print("\n--- Final Test Results ---")
+    print(f"Accuracy: {final_accuracy:.4f}")
+    print(f"Weighted F1 Score: {final_f1_weighted:.4f}")
+
+    # Optional: Print more detailed metrics
+    # You might need the original label mapping to interpret the confusion matrix and classification report
+    # Assuming you have a reverse_party_map or similar to get original labels from encoded integers
+    # reverse_party_map = {v: k for k, v in party_map.items()}
+    # target_names = [reverse_party_map[i] for i in sorted(reverse_party_map.keys())]
+
+    # print("\nClassification Report:")
+    # print(classification_report(y_test_encoded, y_test_pred_final, target_names=target_names))
+
+    # print("\nConfusion Matrix:")
+    # print(confusion_matrix(y_test_encoded, y_test_pred_final))
+
+    print("-" * 25)
+
+    # ------ Metrics -------
+
+    # --- Calculate Additional Metrics (ROC-AUC, Confusion Matrix) ---
+
+    auc = None # Initialize AUC to None, will check for binary later
+
+    # To calculate ROC-AUC, we need the decision function scores from the SVM step
+    # We need to pass the data through the pipeline's transformation steps first (cleaning, vectorization)
+    # then get the decision scores from the final SVM estimator.
+    try:
+        # Apply transformations up to the step before the estimator (SVM)
+        # final_pipeline.transform(X_test) gets output after tfidf_step
+        X_test_transformed_for_svm = final_pipeline.transform(X_test)
+
+        # Access the SVM step within the pipeline and get decision function scores
+        # This assumes your SVM step in the pipeline is named 'svm'
+        decision_scores = final_pipeline.named_steps['svm'].decision_function(X_test_transformed_for_svm)
+
+        # ROC-AUC is primarily for binary classification or multi-class (one-vs-rest)
+        # The standard roc_auc_score expects binary labels (0 or 1) and confidence scores/decision function for the positive class.
+        # For multi-class decision_function returns shape (n_samples, n_classes)
+        # We'll stick to the binary check as in your original code for simplicity.
+        if len(set(y_test_encoded)) == 2:
+            # If binary, decision_function returns (n_samples,) or (n_samples, 1)
+            # roc_auc_score needs the score for the positive class (usually column 1 if shape is (n_samples, 2))
+            # LinearSVC decision_function for binary returns shape (n_samples,) which is correct input
+            auc = roc_auc_score(y_test_encoded, decision_scores)
+        else:
+            # If multi-class and you want OVR AUC, you'd need a different approach
+            # For this example, we'll set AUC to None for multi-class, matching your original logic
+            auc = None # Or handle multi-class AUC calculation if needed
+
+    except Exception as e:
+        print(f"Could not calculate ROC-AUC or Decision Function: {e}")
+        auc = None # Ensure auc is None if calculation fails
+
+    cm = confusion_matrix(y_test_encoded, y_test_pred_final).tolist()
+
+    # --- Timing ---
+    evaluation_time = time.time() - start_time_test
+    print(f"Metric calculation complete in {evaluation_time:.2f} seconds.")
+    # Update the timing dictionary (assuming timing dict is defined)
+    if 'timing' in locals() or 'timing' in globals():
+        timing["evaluation_sec"] = round(evaluation_time, 2)
+        # Make sure total_sec is updated after all steps are done
+        # timing["total_sec"] = round(time.time() - start_total, 2)
+
+    # --- Print Metrics ---
+    print("\n--- Final Test Results ---")
+    print(f"Accuracy : {final_accuracy:.4f}") # Use final_accuracy from previous step
+    print(f"Weighted F1 Score: {final_f1_weighted:.4f}") # Use final_f1_weighted from previous step
+    if auc is not None:
+        print(f"ROC-AUC  : {auc:.4f}")
+    # Corrected: Use y_test_encoded in the confusion_matrix printout
+    print("Confusion Matrix:\n", confusion_matrix(y_test_encoded, y_test_pred_final))
+    # Optional: Print classification report
+    # Assuming target_names can be derived from your party_map and encoded labels
+    try:
+        # Need reverse map to get class names from encoded integers
+        reverse_party_map = {v: k for k, v in PARTY_MAP.items()}
+        # Ensure target_names are in the order of encoded labels (0, 1, 2...)
+        unique_encoded_labels = sorted(list(set(y_test_encoded)))
+        target_names = [reverse_party_map[i] for i in unique_encoded_labels]
+        print("\nClassification Report:")
+        print(classification_report(y_test_encoded, y_test_pred_final, target_names=target_names))
+    except Exception as e:
+        print(f"Could not print Classification Report: {e}")
+
+    print("-" * 25)
+    
+    # --- Log results ---
     log_path = "logs/tfidf_svm_performance.csv"
     os.makedirs("logs", exist_ok=True)
     if not os.path.exists(log_path):
         with open(log_path, "w") as f:
-            f.write("year,accuracy,f1_score,auc\n")
+            f.write("year,accuracy,f1_score,auc\n") # Added auc column
     with open(log_path, "a") as f:
-        # Corrected lines: Use final_accuracy and final_f1
-        f.write(f"{congress_year},{final_accuracy:.4f},{final_f1:.4f},{auc if auc else 'NA'}\n")
+        # Corrected: Use final_accuracy, final_f1_weighted, and auc (or 'NA')
+        f.write(f"{congress_year},{final_accuracy:.4f},{final_f1_weighted:.4f},{auc if auc is not None else 'NA'}\n")
 
-    # le.classes_ is an ndarray like array(['D', 'R'], dtype='<U1')
-    label_names = le.classes_.tolist()
-
-    # Save JSON log
-    # Corrected lines: Use y_test and y_test_pred_final for confusion_matrix
-    cm = confusion_matrix(y_test, y_test_pred_final).tolist()
     result_json = {
-        "removed_short_speeches": removed_short_speeches_count,
-        "removed_duplicate_speeches": removed_duplicate_speeches_count,
         "year": congress_year,
         "accuracy": round(final_accuracy, 4),
-        "f1_score": round(final_f1, 4),
-        "auc": round(auc, 4) if auc else "NA",
-        "confusion_matrix": cm,
-        "labels": label_names
+        "f1_score": round(final_f1_weighted, 4), # Use weighted F1
+        "auc": round(auc, 4) if auc is not None else "NA",
+        "confusion_matrix": cm # Use cm calculated with encoded labels
     }
 
-    timing["total_sec"] = round(time.time() - start_total, 2)
-    result_json.update(timing)
+    # Make sure total_sec timing is updated at the very end of the script
+    if 'timing' in locals() or 'timing' in globals():
+        timing["total_sec"] = round(time.time() - start_total, 2)
+        result_json.update(timing)
+
 
     with open(f"logs/tfidf_results_{congress_year}.json", "w") as jf:
         json.dump(result_json, jf, indent=4)
@@ -212,7 +308,7 @@ def run_tfidf_pipeline(congress_year: str, config: dict):
 if __name__ == "__main__":
     config_path = Path(__file__).parent.parent / "config" / "svm_config.yaml"
     config = load_config(config_path)
-    congress_years = [f"{i:03}" for i in range(79, 112)]
+    congress_years = [f"{i:03}" for i in range(75, 112)]
     for year in congress_years:
         try:
             run_tfidf_pipeline(year, config)

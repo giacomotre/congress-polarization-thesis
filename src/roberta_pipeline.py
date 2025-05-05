@@ -13,13 +13,11 @@ from transformers import AutoTokenizer
 from sklearn.model_selection import train_test_split # Ensure this is imported
 import numpy as np # Import numpy for potential use in confusion matrix handling
 
+from plotting_utils import plot_performance_metrics, plot_confusion_matrix
 
-# --- Direct Imports for Config Loader and Utilities ---
-# Assuming config_loader.py and pipeline_utils.py are located as per your provided code structure
-# Keeping your import structure as provided
 try:
     from config_loader import load_config
-    from pipeline_utils import filter_short_speeches, remove_duplicates, encode_labels_with_map
+    from pipeline_utils import encode_labels_with_map
     # Import your other custom modules as you had them
     from dataset import CongressSpeechDataset
     from roberta_model import RobertaClassifier
@@ -29,13 +27,7 @@ except ImportError as e:
     print("Please ensure dataset.py, roberta_model.py, engine.py, config_loader.py, and pipeline_utils.py are accessible in your Python path.")
     exit()
 
-
-# Import plotting functions
-from plotting_utils import plot_performance_metrics, plot_confusion_matrix # Assuming plotting_utils.py is accessible
-
-
 # --- Direct Imports for Config Loading ---
-# Keeping your config loading logic as provided
 config_path = Path(__file__).parent.parent / "config" / "roberta_config.yaml"
 try:
     config = load_config(config_path)
@@ -63,13 +55,12 @@ MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # --- Main Pipeline Function ---
-# Pass the loaded config dictionary containing only parameters
+
 def run_roberta_pipeline(congress_year: str, config: dict):
     print(f"\n--- Running RoBERTa pipeline for Congress {congress_year} ---")
     start_total_time = time.time()
 
     # --- Configuration (Access from config dictionary) ---
-    # Access parameters from the passed config dictionary
     MODEL_NAME = config['model_params']['model_name']
     NUM_LABELS = config['model_params']['num_labels']
     MAX_TOKEN_LEN = config['model_params']['max_token_len']
@@ -86,9 +77,7 @@ def run_roberta_pipeline(congress_year: str, config: dict):
     PARTY_MAP = config['filter_params']['party_map']
     REVERSE_PARTY_MAP = {v: k for k, v in PARTY_MAP.items()} # Create reverse map for logging
 
-
-    # --- Paths (Defined directly in script, not from config) ---
-    # Use the variables defined at the top of the script
+    # --- Path ---
     csv_file_path = DATA_DIR / f"house_merged_{congress_year}.csv"
     if not csv_file_path.exists():
         print(f"⚠️  Skipping Congress {congress_year}: File not found at {csv_file_path}")
@@ -98,7 +87,6 @@ def run_roberta_pipeline(congress_year: str, config: dict):
     year_results_json_path = LOG_DIR / f"roberta_results_{congress_year}.json"
     model_save_path = MODELS_DIR / f"roberta_classifier_{congress_year}.pth" # Optional: path to save model
 
-
     # --- Device Setup ---
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
@@ -107,29 +95,11 @@ def run_roberta_pipeline(congress_year: str, config: dict):
     print("Loading and preprocessing data...")
     start_time = time.time()
     df = pd.read_csv(csv_file_path)
-    initial_count = len(df)
-    print(f"  - Loaded {initial_count} initial rows.")
-
-    # Apply filtering (min word count, duplicates) using imported utility functions
-    # Ensure these functions are correctly imported from pipeline_utils
-    # Assuming filter_short_speeches returns tuple (df, count)
-    df_filtered, removed_short_speeches_count = filter_short_speeches(df, min_words=MIN_WORD_COUNT)
-    print(f"  - Removed {removed_short_speeches_count} speeches shorter than {MIN_WORD_COUNT} words.")
-
-    # Assuming remove_duplicates returns tuple (df, count)
-    df_filtered, removed_duplicate_count = remove_duplicates(df_filtered)
-    print(f"  - Removed {removed_duplicate_count} duplicate speeches.")
-
-
-    # Handle missing speeches or parties BEFORE mapping and splitting
-    df_filtered.dropna(subset=['speech', 'party'], inplace=True)
-    print(f"  - Removed rows with missing speech or party. Remaining: {len(df_filtered)}")
 
     # Map party labels to integers using imported utility function and config party_map
     # Assuming encode_labels_with_map takes df and party_map and returns df with 'label'
-    df_processed = encode_labels_with_map(df_filtered, party_map=PARTY_MAP)
+    df_processed = encode_labels_with_map(df, party_map=PARTY_MAP)
     print(f"  - Mapped party labels. Final sample count for split: {len(df_processed)}")
-
 
     preprocessing_time = time.time() - start_time
     print(f"Preprocessing complete in {preprocessing_time:.2f} seconds.")
@@ -152,8 +122,8 @@ def run_roberta_pipeline(congress_year: str, config: dict):
 
     # Split train_val speakers into train and validation sets using config values
     if len(train_val_speaker) < 2: # Need at least 2 speakers in train_val for validation split
-         print(f"⚠️  Skipping Congress {congress_year}: Not enough unique speakers ({len(train_val_speaker)}) in train_val set for validation split.")
-         return
+        print(f"⚠️  Skipping Congress {congress_year}: Not enough unique speakers ({len(train_val_speaker)}) in train_val set for validation split.")
+        return
 
 
     train_speaker, val_speaker = train_test_split(
@@ -171,7 +141,7 @@ def run_roberta_pipeline(congress_year: str, config: dict):
     print(f"  - Validation speakers: {len(val_speaker)}, Samples: {len(val_df)}")
     print(f"  - Test speakers: {len(test_speaker)}, Samples: {len(test_df)}")
 
-    # --- Add Class Distribution Logging ---
+    # --- Class Distribution Logging ---
     print("  - Class distribution after split:")
     train_counts = Counter(train_df['party'])
     val_counts = Counter(val_df['party'])
@@ -179,8 +149,6 @@ def run_roberta_pipeline(congress_year: str, config: dict):
     print(f"    Train: {dict(train_counts)}")
     print(f"    Validation: {dict(val_counts)}")
     print(f"    Test: {dict(test_counts)}")
-    # -------------------------------------
-
 
     split_time = time.time() - start_time
     print(f"Split complete in {split_time:.2f} seconds.")
@@ -191,11 +159,10 @@ def run_roberta_pipeline(congress_year: str, config: dict):
         return
     # Check if both classes are present in the training data AFTER the split
     if len(train_df['label'].unique()) < 2:
-         # Identify the single class present for better logging
-         single_class = train_df['party'].iloc[0] if not train_df.empty else 'N/A'
-         print(f"⚠️  Skipping Congress {congress_year}: Only one class ({single_class}) present in training data after split.")
-         return
-
+        # Identify the single class present for better logging
+        single_class = train_df['party'].iloc[0] if not train_df.empty else 'N/A'
+        print(f"⚠️  Skipping Congress {congress_year}: Only one class ({single_class}) present in training data after split.")
+        return
 
     # --- Dataset and DataLoader Creation ---
     print("Creating Datasets and DataLoaders...")
@@ -323,8 +290,8 @@ def run_roberta_pipeline(congress_year: str, config: dict):
     else:
         # Print rows aligned with sorted cm_labels
         for i, true_label_int in enumerate(sorted(cm_labels)):
-             row_data = cm_matrix_data[i]
-             print(f"True {party_names.get(true_label_int, str(true_label_int))}({true_label_int}) | {'  '.join(map(str, row_data))}")
+            row_data = cm_matrix_data[i]
+            print(f"True {party_names.get(true_label_int, str(true_label_int))}({true_label_int}) | {'  '.join(map(str, row_data))}")
 
 
     # --- Logging Results ---

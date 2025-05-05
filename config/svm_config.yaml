@@ -1,6 +1,13 @@
 model_name: svm
 tfidf_max_features: 10000
 ngram_range: [1, 2]
-test_size: 0.15
-random_state: 42
-use_leave_speaker_out: true
+
+split_params:
+  test_size: 0.15
+  validation_size: 0.25
+  random_state: 42
+
+party_map:
+  D: 0
+  R: 1
+  # Add other parties if necessary, they will be excluded if not in this map

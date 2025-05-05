@@ -24,21 +24,6 @@ nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
 # NLTK stopwords
 STOPWORDS = set(stopwords.words("english"))
 
-# --- Shared Utilities ---
-def filter_short_speeches(df: pd.DataFrame, text_col: str = "speech", min_words: int = 15) -> tuple[pd.DataFrame, int]:
-    initial_rows = len(df)
-    # Ensure the text column is treated as string to avoid errors with non-string types
-    filtered_df = df[df[text_col].astype(str).apply(lambda x: len(x.split()) >= min_words)].copy()
-    removed_short_speeches_count = initial_rows - len(filtered_df)
-    return filtered_df, removed_short_speeches_count
-
-def remove_duplicates(df: pd.DataFrame, text_col: str = "speech") -> tuple[pd.DataFrame, int]:
-    initial_rows = len(df)
-    # Ensure the text column is treated as string before dropping duplicates
-    deduplicated_df = df.astype({text_col: 'str'}).drop_duplicates(subset=[text_col]).copy()
-    removed_duplicate_speeches_count = initial_rows - len(deduplicated_df)
-    return deduplicated_df, removed_duplicate_speeches_count
-
 # --- Reusable Cleaning Components ---
 def lowercase(text: str) -> str:
     if not isinstance(text, str):
@@ -78,26 +63,6 @@ def clean_text_for_bert(text: str) -> str:
     if not isinstance(text, str):
         return "" # Handle non-string input gracefully
     return re.sub(r"\s+", " ", text).strip()
-
-# --- Batch Processing ---
-def preprocess_df_for_tfidf(df: pd.DataFrame, text_col: str = "speech") -> tuple[pd.DataFrame, int, int]:
-    # This function seems to expect the OLD return types of filter_short_speeches and remove_duplicates
-    # If those utils now return tuples, this function's calls to them need to be updated as well
-    # For now, assuming the caller of preprocess_df_for_tfidf handles getting the correct DF
-    # However, let's update the calls within this function to handle the tuple return
-    df_filtered_short, removed_short_speeches_count = filter_short_speeches(df.copy(), text_col)
-    df_deduplicated, removed_duplicate_speeches_count = remove_duplicates(df_filtered_short, text_col)
-
-    df_deduplicated[text_col] = df_deduplicated[text_col].apply(clean_text_for_tfidf)
-    return df_deduplicated, removed_short_speeches_count, removed_duplicate_speeches_count
-
-def preprocess_df_for_bert(df: pd.DataFrame, text_col: str = "speech") -> pd.DataFrame:
-    # This function also seems to expect the OLD return types. Update calls.
-    df_filtered_short, _ = filter_short_speeches(df.copy(), text_col) # Ignore count if not needed
-    df_deduplicated, _ = remove_duplicates(df_filtered_short, text_col) # Ignore count if not needed
-
-    df_deduplicated[text_col] = df_deduplicated[text_col].apply(clean_text_for_bert)
-    return df_deduplicated
 
 # --- Consistent Label Encoding using a Map ---
 def encode_labels_with_map(df: pd.DataFrame, party_map: Dict[str, int], party_col: str = "party", label_col: str = "label") -> pd.DataFrame:
