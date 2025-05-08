@@ -47,7 +47,12 @@ class RobertaClassifier(nn.Module):
         # Get the hidden state of the [CLS] token (the first token)
         # outputs.last_hidden_state has shape (batch_size, sequence_length, hidden_size)
         cls_token_hidden_state = outputs.last_hidden_state[:, 0, :]
-
+        
+                # add more linear layer, be sure the previous layer are frozen, suing the average of all the embedding of all the tokem
+                # different 
+                # max tokens, tokenizer
+                #those documents 
+        
         # Optionally apply dropout
         # cls_token_hidden_state = self.dropout(cls_token_hidden_state)
 

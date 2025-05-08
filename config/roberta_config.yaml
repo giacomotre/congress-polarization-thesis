@@ -7,8 +7,8 @@ model_params:
   max_token_len: 512
   batch_size: 8
   num_epochs: 5 # Start small, usually 3-5 epochs are enough for finetuning BERT-likes
-  learning_rate: 5.0e-5 # Note: scientific notation in YAML needs to be quoted if starting with e or E
-  weight_decay: 0.0
+  learning_rate: 2.0e-5 # Note: scientific notation in YAML needs to be quoted if starting with e or E, first was 5
+  weight_decay: 0.0 # try 0.01, 0.05, 0.1
 
 # --- Data Splitting Parameters ---
 split_params:

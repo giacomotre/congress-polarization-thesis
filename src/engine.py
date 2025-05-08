@@ -1,9 +1,10 @@
+import numpy as np
 import torch
 import torch.nn as nn
 import time
 from torch.utils.data import DataLoader
 from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, confusion_matrix
-import numpy as np
+
 
 def train_epoch(model: nn.Module, data_loader: DataLoader, optimizer: torch.optim.Optimizer, criterion: nn.Module, device: torch.device):
     """
@@ -146,8 +147,3 @@ def evaluate_epoch(model: nn.Module, data_loader: DataLoader, criterion: nn.Modu
     }
 
     return metrics
-
-# Note: You would typically NOT run this script directly.
-# These functions will be called from your main pipeline script (e.g., run_roberta_pipeline.py)
-# which will handle loading data for each year, splitting, creating DataLoaders,
-# initializing the model/optimizer/criterion, and looping through epochs.

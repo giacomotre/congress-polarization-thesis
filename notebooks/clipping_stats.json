@@ -1,5 +1,37 @@
 [
     {
+        "Congress": 75,
+        "Start Count (After Basic Clean)": 200344,
+        "Removed (Speech NA)": 573,
+        "Removed (Duplicates)": 49871,
+        "Removed (Clipped)": 88732,
+        "Final Count (After Clipping)": 61168
+    },
+    {
+        "Congress": 76,
+        "Start Count (After Basic Clean)": 241592,
+        "Removed (Speech NA)": 1016,
+        "Removed (Duplicates)": 63359,
+        "Removed (Clipped)": 101917,
+        "Final Count (After Clipping)": 75300
+    },
+    {
+        "Congress": 77,
+        "Start Count (After Basic Clean)": 203758,
+        "Removed (Speech NA)": 813,
+        "Removed (Duplicates)": 49830,
+        "Removed (Clipped)": 86443,
+        "Final Count (After Clipping)": 66672
+    },
+    {
+        "Congress": 78,
+        "Start Count (After Basic Clean)": 207535,
+        "Removed (Speech NA)": 1854,
+        "Removed (Duplicates)": 52439,
+        "Removed (Clipped)": 86034,
+        "Final Count (After Clipping)": 67208
+    },
+    {
         "Congress": 79,
         "Start Count (After Basic Clean)": 209920,
         "Removed (Speech NA)": 1171,

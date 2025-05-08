@@ -27,15 +27,22 @@ print("Loaded config:", json.dumps(config, indent=4))
 
 MAX_FEATURES = config.get("tfidf_max_features", 10000)
 NGRAM_RANGE = tuple(config.get("ngram_range", [1, 2]))
-TEST_SIZE = config['split_params']['test_size']
-VALIDATION_SIZE = config['split_params']['validation_size']
-RANDOM_STATE = config['split_params']['random_state']
+
+split_params = config.get('split_params', {})
+TEST_SIZE = split_params.get('test_size', 0.15)
+VALIDATION_SIZE = split_params.get('validation_size', 0.25)
+DEFAULT_RANDOM_STATE = split_params.get('random_state', 42) 
+SEEDS = split_params.get('seeds', [DEFAULT_RANDOM_STATE]) 
+
+data_params = config.get('data_params', {})
+CONGRESS_YEAR_START = data_params.get('congress_year_start', 75) 
+CONGRESS_YEAR_END = data_params.get('congress_year_end', 112) 
+
 PARTY_MAP = config['party_map']
 
-
 # ------ Main Loop -------
-def run_tfidf_pipeline(congress_year: str, config: dict):
-    print(f"\n Running pipeline for Congress {congress_year}")
+def run_tfidf_pipeline(congress_year: str, config: dict, random_state: int):
+    print(f"\n Running pipeline for Congress {congress_year} with seed{random_state}")
     timing = {}
     start_total = time.time()
 
@@ -49,28 +56,84 @@ def run_tfidf_pipeline(congress_year: str, config: dict):
 
     unique_speakers = df['speakerid'].unique()
 
-    # Split speakers into train_val and test sets using config values
+    # Split speakers using the passed-in random_state
     train_val_speaker, test_speaker = train_test_split(
         unique_speakers,
-        test_size=TEST_SIZE,
-        random_state=RANDOM_STATE
+        test_size=config['split_params']['test_size'], # Get split size from config
+        random_state=random_state # Use the function argument
     )
 
+    # Use the passed-in random_state again for the second split
     train_speaker, val_speaker = train_test_split(
         train_val_speaker,
-        test_size=VALIDATION_SIZE, 
-        random_state=RANDOM_STATE
+        test_size=config['split_params']['validation_size'], # Get validation split size from config
+        random_state=random_state # Use the function argument
     )
 
     # Create dataframes based on speaker IDs
     train_df = df[df["speakerid"].isin(train_speaker)].reset_index(drop=True)
     val_df = df[df["speakerid"].isin(val_speaker)].reset_index(drop=True)
     test_df = df[df["speakerid"].isin(test_speaker)].reset_index(drop=True)
-
-    print(f"  - Train speakers: {len(train_speaker)}, Samples: {len(train_df)}")
-    print(f"  - Validation speakers: {len(val_speaker)}, Samples: {len(val_df)}")
-    print(f"  - Test speakers: {len(test_speaker)}, Samples: {len(test_df)}")
     
+    #speech count check
+    train_speech_count = train_df["speech_id"].nunique()
+    val_speech_count = val_df["speech_id"].nunique()
+    val_speech_coun = test_df["speech_id"].nunique()
+    
+    print(f"  - Train speakers: {len(train_speaker)}, Samples: {len(train_df)}, Speeches:{train_speech_count}")
+    print(f"  - Validation speakers: {len(val_speaker)}, Samples: {len(val_df)}, Speeches:{val_speech_count}")
+    print(f"  - Test speakers: {len(test_speaker)}, Samples: {len(test_df)}, Speeches:{val_speech_coun}")
+    
+    print("  - Speech ID distribution by Party after split:")
+
+    #Speech count by Party check
+    print("    Train:")
+    if not train_df.empty:
+        train_speech_party_dist = train_df.groupby('party')['speech_id'].nunique()
+        print(train_speech_party_dist.to_dict())
+    else:
+        print("      Train DataFrame is empty.")
+
+    print("    Validation:")
+    if not val_df.empty:
+        val_speech_party_dist = val_df.groupby('party')['speech_id'].nunique()
+        print(val_speech_party_dist.to_dict())
+    else:
+        print("      Validation DataFrame is empty.")
+
+
+    print("    Test:")
+    if not test_df.empty:
+        test_speech_party_dist = test_df.groupby('party')['speech_id'].nunique()
+        print(test_speech_party_dist.to_dict())
+    else:
+        print("      Test DataFrame is empty.")
+        
+        
+    #Total Word Count by Party check 
+    print("  - Total Word Count by Party after split:")
+
+    if not train_df.empty:
+        print("    Train:")
+        train_word_count_party_dist = train_df.groupby('party')['word_count'].sum()
+        print(train_word_count_party_dist.to_dict())
+    else:
+        print("    Train: Train DataFrame is empty.")
+
+    if not val_df.empty:
+        print("    Validation:")
+        val_word_count_party_dist = val_df.groupby('party')['word_count'].sum()
+        print(val_word_count_party_dist.to_dict())
+    else:
+        print("    Validation: Validation DataFrame is empty.")
+
+    if not test_df.empty:
+        print("    Test:")
+        test_word_count_party_dist = test_df.groupby('party')['word_count'].sum()
+        print(test_word_count_party_dist.to_dict())
+    else:
+        print("    Test: Test DataFrame is empty.")
+
     # Separate features (X) and labels (y)
     X_train = train_df["speech"]
     y_train = train_df["party"] 
@@ -78,15 +141,6 @@ def run_tfidf_pipeline(congress_year: str, config: dict):
     y_val = val_df["party"]   
     X_test = test_df["speech"]
     y_test = test_df["party"]     
-
-    # Class Distribution Logging 
-    print("  - Class distribution after split:")
-    train_counts = Counter(train_df['party'])
-    val_counts = Counter(val_df['party'])
-    test_counts = Counter(test_df['party'])
-    print(f"    Train: {dict(train_counts)}")
-    print(f"    Validation: {dict(val_counts)}")
-    print(f"    Test: {dict(test_counts)}")
 
     split_time = time.time() - start_time
     print(f"Split complete in {split_time:.2f} seconds.")
@@ -216,13 +270,8 @@ def run_tfidf_pipeline(congress_year: str, config: dict):
     # We need to pass the data through the pipeline's transformation steps first (cleaning, vectorization)
     # then get the decision scores from the final SVM estimator.
     try:
-        # Apply transformations up to the step before the estimator (SVM)
-        # final_pipeline.transform(X_test) gets output after tfidf_step
-        X_test_transformed_for_svm = final_pipeline.transform(X_test)
-
-        # Access the SVM step within the pipeline and get decision function scores
-        # This assumes your SVM step in the pipeline is named 'svm'
-        decision_scores = final_pipeline.named_steps['svm'].decision_function(X_test_transformed_for_svm)
+        # Get decision function scores directly from the fitted pipeline
+        decision_scores = final_pipeline.decision_function(X_test) 
 
         # ROC-AUC is primarily for binary classification or multi-class (one-vs-rest)
         # The standard roc_auc_score expects binary labels (0 or 1) and confidence scores/decision function for the positive class.
@@ -277,41 +326,126 @@ def run_tfidf_pipeline(congress_year: str, config: dict):
     print("-" * 25)
     
     # --- Log results ---
-    log_path = "logs/tfidf_svm_performance.csv"
-    os.makedirs("logs", exist_ok=True)
-    if not os.path.exists(log_path):
-        with open(log_path, "w") as f:
-            f.write("year,accuracy,f1_score,auc\n") # Added auc column
-    with open(log_path, "a") as f:
-        # Corrected: Use final_accuracy, final_f1_weighted, and auc (or 'NA')
-        f.write(f"{congress_year},{final_accuracy:.4f},{final_f1_weighted:.4f},{auc if auc is not None else 'NA'}\n")
+    # Define paths for detailed log CSV and per-seed JSON
+    detailed_log_path = "logs/tfidf_svm_performance_detailed.csv"
+    os.makedirs("logs", exist_ok=True) # Ensure logs directory exists
+
+    # Only write header if the detailed CSV file is new and empty
+    # This check is important because the main loop deletes the file once at the start.
+    if not os.path.exists(detailed_log_path) or os.path.getsize(detailed_log_path) == 0:
+        with open(detailed_log_path, "w") as f:
+            # Added 'seed' column to the header
+            f.write("seed,year,accuracy,f1_score,auc\n")
+
+    # Append the results for the current seed and year to the detailed CSV
+    with open(detailed_log_path, "a") as f:
+        f.write(f"{random_state},{congress_year},{final_accuracy:.4f},{final_f1_weighted:.4f},{auc if auc is not None else 'NA'}\n")
 
     result_json = {
+        "seed": random_state, # Add seed to JSON
         "year": congress_year,
         "accuracy": round(final_accuracy, 4),
-        "f1_score": round(final_f1_weighted, 4), # Use weighted F1
+        "f1_score": round(final_f1_weighted, 4),
         "auc": round(auc, 4) if auc is not None else "NA",
         "confusion_matrix": cm # Use cm calculated with encoded labels
+        # Add other metrics like timing if desired
     }
 
-    # Make sure total_sec timing is updated at the very end of the script
+    # Update timing dict (assuming it's in scope from earlier in the function)
+    # If you added timing measurements earlier in run_tfidf_pipeline (e.g., split_time, tuning_time etc.),
+    # make sure to calculate total_sec at the very end before this logging section
+    # Example: timing["total_sec"] = round(time.time() - start_total, 2)
     if 'timing' in locals() or 'timing' in globals():
-        timing["total_sec"] = round(time.time() - start_total, 2)
+        # Assuming timing dictionary is populated
         result_json.update(timing)
 
 
-    with open(f"logs/tfidf_results_{congress_year}.json", "w") as jf:
+    # Save JSON results with seed in the filename to avoid overwriting
+    json_log_path = f"logs/tfidf_results_{congress_year}_seed{random_state}.json"
+    with open(json_log_path, "w") as jf:
         json.dump(result_json, jf, indent=4)
 
-    plot_confusion_matrix(f"logs/tfidf_results_{congress_year}.json")
+    # Update plot_confusion_matrix call to use the new JSON filename
+    # This will generate a separate confusion matrix plot per year *and* per seed.
+    # You might prefer to generate confusion matrices only for the averaged results or selected seeds later,
+    # in which case you could comment out or modify this line.
+    try:
+        plot_confusion_matrix(json_log_path)
+    except Exception as e:
+        print(f"Error plotting confusion matrix for {congress_year} seed {random_state}: {e}") # Added error message for clarity
+
+# ... rest of the function (should be nothing after this)
 
 if __name__ == "__main__":
     config_path = Path(__file__).parent.parent / "config" / "svm_config.yaml"
     config = load_config(config_path)
-    congress_years = [f"{i:03}" for i in range(75, 112)]
-    for year in congress_years:
-        try:
-            run_tfidf_pipeline(year, config)
-        except FileNotFoundError:
-            print(f"⚠️  Skipping Congress {year}: CSV file not found.")
-    plot_performance_metrics("logs/tfidf_svm_performance.csv")
+    
+    split_params= config.get("data_params", {})
+    CONGRESS_YEAR_START = data_params.get('congress_year_start', 75) 
+    CONGRESS_YEAR_END = data_params.get('congress_year_end', 112) 
+    
+    detailed_log_path = "logs/tfidf_svm_performance_detailed.csv"
+    avg_log_path = "logs/tfidf_svm_performance_avg.csv"
+    os.makedirs("logs", exist_ok=True) # Ensure logs directory exists
+    
+    congress_years = [f"{i:03}" for i in range(CONGRESS_YEAR_START, CONGRESS_YEAR_END)]
+    
+    # This ensures a clean file to append to for this batch of runs.
+    if os.path.exists(detailed_log_path):
+        os.remove(detailed_log_path)
+        print(f"Deleted existing detailed log file: {detailed_log_path}")
+    
+for seed in SEEDS: # Outer loop: Iterate through each seed
+        print(f"\n--- Starting runs for seed: {seed} ---")
+        for year in congress_years: # Inner loop: Iterate through each year for the current seed
+            try:
+                # Call the pipeline function, passing the current year, config, and seed
+                run_tfidf_pipeline(year, config, random_state=seed)
+
+            except FileNotFoundError:
+                print(f"⚠️  Skipping Congress {year} (seed {seed}): CSV file not found.") # Added seed to message
+            except Exception as e:
+                print(f"❌ An error occurred during pipeline run for Congress {year} with seed {seed}: {e}") 
+                
+# --- Calculate Averages per Year across Seeds ---
+try:
+    # Read the detailed log file containing results for all seeds and years
+    df_detailed = pd.read_csv(detailed_log_path)
+
+    # Ensure 'auc' column is numeric, converting 'NA' to NaN for averaging
+    df_detailed['auc'] = pd.to_numeric(df_detailed['auc'], errors='coerce')
+
+    # Calculate mean metrics per year, grouped by the 'year' column
+    # .mean() will automatically handle NaN values in AUC by ignoring them
+    df_avg = df_detailed.groupby('year')[['accuracy', 'f1_score', 'auc']].mean().reset_index()
+
+    # Optional: Calculate standard deviation if you want to visualize variability later
+    df_std = df_detailed.groupby('year')[['accuracy', 'f1_score', 'auc']].std().reset_index()
+    df_std.rename(columns={'accuracy':'accuracy_std', 'f1_score':'f1_score_std', 'auc':'auc_std'}, inplace=True)
+    df_avg = df_avg.merge(df_std, on='year')
+
+    # Sort the averaged results by year for correct plotting order
+    # Convert 'year' to integer for numerical sorting
+    df_avg['year_int'] = df_avg['year'].astype(int)
+    df_avg = df_avg.sort_values('year_int').drop('year_int', axis=1) # Drop the temporary int column
+
+    # Save the averaged results to a new CSV file
+    df_avg.to_csv(avg_log_path, index=False)
+    print(f"Saved averaged performance metrics to {avg_log_path}")
+
+    # --- Generate Plots using Averaged Data ---
+    # Call the plotting function with the path to the averaged data file.
+    # This assumes your plot_performance_metrics function is set up to read
+    # a CSV with 'year', 'accuracy', 'f1_score', 'auc' columns and plot them over 'year'.
+    # You might need to update the plot_performance_metrics function itself
+    # in your plotting_utils.py if it had hardcoded filenames or column assumptions
+    # that don't match the avg_log_path structure (though it should be compatible).
+    print("\nGenerating performance plots using averaged data...")
+    plot_performance_metrics(avg_log_path) # <--- Ensure this function reads avg_log_path
+
+except FileNotFoundError:
+    print(f"Error: Detailed performance log not found at {detailed_log_path}. Cannot calculate averages or plot.")
+except Exception as e:
+    print(f"An error occurred during calculating averages or plotting: {e}")
+
+

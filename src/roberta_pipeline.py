@@ -18,7 +18,6 @@ from plotting_utils import plot_performance_metrics, plot_confusion_matrix
 try:
     from config_loader import load_config
     from pipeline_utils import encode_labels_with_map
-    # Import your other custom modules as you had them
     from dataset import CongressSpeechDataset
     from roberta_model import RobertaClassifier
     from engine import train_epoch, evaluate_epoch
@@ -60,7 +59,7 @@ def run_roberta_pipeline(congress_year: str, config: dict):
     print(f"\n--- Running RoBERTa pipeline for Congress {congress_year} ---")
     start_total_time = time.time()
 
-    # --- Configuration (Access from config dictionary) ---
+    # --- Configuration ---
     MODEL_NAME = config['model_params']['model_name']
     NUM_LABELS = config['model_params']['num_labels']
     MAX_TOKEN_LEN = config['model_params']['max_token_len']
@@ -77,7 +76,7 @@ def run_roberta_pipeline(congress_year: str, config: dict):
     PARTY_MAP = config['filter_params']['party_map']
     REVERSE_PARTY_MAP = {v: k for k, v in PARTY_MAP.items()} # Create reverse map for logging
 
-    # --- Path ---
+    # Path 
     csv_file_path = DATA_DIR / f"house_merged_{congress_year}.csv"
     if not csv_file_path.exists():
         print(f"⚠️  Skipping Congress {congress_year}: File not found at {csv_file_path}")
@@ -87,7 +86,7 @@ def run_roberta_pipeline(congress_year: str, config: dict):
     year_results_json_path = LOG_DIR / f"roberta_results_{congress_year}.json"
     model_save_path = MODELS_DIR / f"roberta_classifier_{congress_year}.pth" # Optional: path to save model
 
-    # --- Device Setup ---
+    # Device Setup 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
@@ -96,8 +95,7 @@ def run_roberta_pipeline(congress_year: str, config: dict):
     start_time = time.time()
     df = pd.read_csv(csv_file_path)
 
-    # Map party labels to integers using imported utility function and config party_map
-    # Assuming encode_labels_with_map takes df and party_map and returns df with 'label'
+    # Encode party label
     df_processed = encode_labels_with_map(df, party_map=PARTY_MAP)
     print(f"  - Mapped party labels. Final sample count for split: {len(df_processed)}")
 
@@ -125,7 +123,6 @@ def run_roberta_pipeline(congress_year: str, config: dict):
         print(f"⚠️  Skipping Congress {congress_year}: Not enough unique speakers ({len(train_val_speaker)}) in train_val set for validation split.")
         return
 
-
     train_speaker, val_speaker = train_test_split(
         train_val_speaker,
         test_size=VALIDATION_SIZE, # This is relative to train_val_speaker size
@@ -141,7 +138,7 @@ def run_roberta_pipeline(congress_year: str, config: dict):
     print(f"  - Validation speakers: {len(val_speaker)}, Samples: {len(val_df)}")
     print(f"  - Test speakers: {len(test_speaker)}, Samples: {len(test_df)}")
 
-    # --- Class Distribution Logging ---
+    # Class Distribution Logging
     print("  - Class distribution after split:")
     train_counts = Counter(train_df['party'])
     val_counts = Counter(val_df['party'])
