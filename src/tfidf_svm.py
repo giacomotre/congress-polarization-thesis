@@ -10,8 +10,10 @@ from collections import Counter
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import GridSearchCV
 from sklearn.preprocessing import FunctionTransformer
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.svm import LinearSVC
+
+from cuml.feature_extraction.text import TfidfVectorizer
+from cuml.svm import LinearSVC
+
 from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, confusion_matrix, classification_report
 from sklearn.model_selection import train_test_split
 
@@ -31,12 +33,12 @@ NGRAM_RANGE = tuple(config.get("ngram_range", [1, 2]))
 split_params = config.get('split_params', {})
 TEST_SIZE = split_params.get('test_size', 0.15)
 VALIDATION_SIZE = split_params.get('validation_size', 0.25)
-DEFAULT_RANDOM_STATE = split_params.get('random_state', 42) 
-SEEDS = split_params.get('seeds', [DEFAULT_RANDOM_STATE]) 
+DEFAULT_RANDOM_STATE = split_params.get('random_state', 42)
+SEEDS = split_params.get('seeds', [DEFAULT_RANDOM_STATE])
 
 data_params = config.get('data_params', {})
-CONGRESS_YEAR_START = data_params.get('congress_year_start', 75) 
-CONGRESS_YEAR_END = data_params.get('congress_year_end', 112) 
+CONGRESS_YEAR_START = data_params.get('congress_year_start', 75)
+CONGRESS_YEAR_END = data_params.get('congress_year_end', 112)
 
 PARTY_MAP = config['party_map']
 
@@ -46,7 +48,7 @@ def run_tfidf_pipeline(congress_year: str, config: dict, random_state: int):
     timing = {}
     start_total = time.time()
 
-    # ------ Data Loading -------   
+    # ------ Data Loading -------
     input_path = f"data/merged/house_db/house_merged_{congress_year}.csv"
     df = pd.read_csv(input_path)
 
@@ -74,16 +76,16 @@ def run_tfidf_pipeline(congress_year: str, config: dict, random_state: int):
     train_df = df[df["speakerid"].isin(train_speaker)].reset_index(drop=True)
     val_df = df[df["speakerid"].isin(val_speaker)].reset_index(drop=True)
     test_df = df[df["speakerid"].isin(test_speaker)].reset_index(drop=True)
-    
+
     #speech count check
     train_speech_count = train_df["speech_id"].nunique()
     val_speech_count = val_df["speech_id"].nunique()
     val_speech_coun = test_df["speech_id"].nunique()
-    
+
     print(f"  - Train speakers: {len(train_speaker)}, Samples: {len(train_df)}, Speeches:{train_speech_count}")
     print(f"  - Validation speakers: {len(val_speaker)}, Samples: {len(val_df)}, Speeches:{val_speech_count}")
     print(f"  - Test speakers: {len(test_speaker)}, Samples: {len(test_df)}, Speeches:{val_speech_coun}")
-    
+
     print("  - Speech ID distribution by Party after split:")
 
     #Speech count by Party check
@@ -108,9 +110,8 @@ def run_tfidf_pipeline(congress_year: str, config: dict, random_state: int):
         print(test_speech_party_dist.to_dict())
     else:
         print("      Test DataFrame is empty.")
-        
-        
-    #Total Word Count by Party check 
+
+    #Total Word Count by Party check
     print("  - Total Word Count by Party after split:")
 
     if not train_df.empty:
@@ -136,15 +137,15 @@ def run_tfidf_pipeline(congress_year: str, config: dict, random_state: int):
 
     # Separate features (X) and labels (y)
     X_train = train_df["speech"]
-    y_train = train_df["party"] 
+    y_train = train_df["party"]
     X_val = val_df["speech"]
-    y_val = val_df["party"]   
+    y_val = val_df["party"]
     X_test = test_df["speech"]
-    y_test = test_df["party"]     
+    y_test = test_df["party"]
 
     split_time = time.time() - start_time
     print(f"Split complete in {split_time:.2f} seconds.")
-    
+
     # ------ Encoding -------
     print("Encoding labels using encode_labels_with_map...")
 
@@ -163,8 +164,8 @@ def run_tfidf_pipeline(congress_year: str, config: dict, random_state: int):
     y_val_encoded = pd.Series(y_val_encoded)
     y_test_encoded = pd.Series(y_test_encoded)
 
-    print("Labels encoded.") 
-    
+    print("Labels encoded.")
+
     # --- Pipeline ---
     #Text cleaning, Vectorization and
 
@@ -175,10 +176,10 @@ def run_tfidf_pipeline(congress_year: str, config: dict, random_state: int):
     # and X_train etc are pandas Series. validate=False might be needed for Series input.
     cleaning_step = FunctionTransformer(lambda x: x.apply(clean_text_for_tfidf), validate=False)
 
-    # Define the TF-IDF vectorization step
+    # Define the TF-IDF vectorization step (Now using cuML)
     tfidf_step = TfidfVectorizer() # Parameters like max_features, ngram_range will be tuned
 
-    # Define the SVM model step
+    # Define the SVM model step (Now using cuML)
     svm_step = LinearSVC() # Parameters like C can also be tuned
 
     # Create the pipeline chaining the steps
@@ -202,8 +203,15 @@ def run_tfidf_pipeline(congress_year: str, config: dict, random_state: int):
     }
 
     # Create the GridSearchCV object
-    grid_search = GridSearchCV(pipeline, param_grid, cv=5, scoring='accuracy', verbose=1, n_jobs=-1) # n_jobs=-1 uses all available cores
+    # Note: While GridSearchCV is from scikit-learn, it can work with cuML estimators within the pipeline.
+    # n_jobs=-1 here will still control CPU usage for GridSearchCV's cross-validation loops,
+    # but the fitting and transforming within the pipeline steps will use the GPU.
+    grid_search = GridSearchCV(pipeline, param_grid, cv=5, scoring='accuracy', verbose=1, n_jobs=-1)
 
+    # Pass data to GridSearchCV
+    # Note: cuML estimators generally work best with cuDF DataFrames or NumPy arrays on the GPU.
+    # While they might accept pandas Series, converting to a compatible format might be beneficial for performance.
+    # For now, we'll keep the pandas Series as input as it's likely handled, but be aware for optimization.
     grid_search.fit(X_train, y_train_encoded)
 
     print(f"Hyperparameter tuning complete in {time.time() - start_time_tuning:.2f} seconds.")
@@ -233,6 +241,8 @@ def run_tfidf_pipeline(congress_year: str, config: dict, random_state: int):
     print("Evaluating final model on test data...")
     start_time_test = time.time()
 
+    # Pass test data to the final pipeline for prediction
+    # Again, consider converting to a cuML-compatible format if performance is critical.
     y_test_pred_final = final_pipeline.predict(X_test)
 
     # Evaluate the predictions against the encoded test labels
@@ -271,7 +281,8 @@ def run_tfidf_pipeline(congress_year: str, config: dict, random_state: int):
     # then get the decision scores from the final SVM estimator.
     try:
         # Get decision function scores directly from the fitted pipeline
-        decision_scores = final_pipeline.decision_function(X_test) 
+        # This should now use the cuML LinearSVC's decision_function
+        decision_scores = final_pipeline.decision_function(X_test)
 
         # ROC-AUC is primarily for binary classification or multi-class (one-vs-rest)
         # The standard roc_auc_score expects binary labels (0 or 1) and confidence scores/decision function for the positive class.
@@ -302,6 +313,7 @@ def run_tfidf_pipeline(congress_year: str, config: dict, random_state: int):
         # Make sure total_sec is updated after all steps are done
         # timing["total_sec"] = round(time.time() - start_total, 2)
 
+
     # --- Print Metrics ---
     print("\n--- Final Test Results ---")
     print(f"Accuracy : {final_accuracy:.4f}") # Use final_accuracy from previous step
@@ -324,7 +336,7 @@ def run_tfidf_pipeline(congress_year: str, config: dict, random_state: int):
         print(f"Could not print Classification Report: {e}")
 
     print("-" * 25)
-    
+
     # --- Log results ---
     # Define paths for detailed log CSV and per-seed JSON
     detailed_log_path = "logs/tfidf_svm_performance_detailed.csv"
@@ -370,6 +382,12 @@ def run_tfidf_pipeline(congress_year: str, config: dict, random_state: int):
     # You might prefer to generate confusion matrices only for the averaged results or selected seeds later,
     # in which case you could comment out or modify this line.
     try:
+        # Pass the correct labels to plot_confusion_matrix if needed for axis ticks
+        # This might require modifying plot_confusion_matrix to accept a labels list
+        # For now, it seems plot_confusion_matrix tries to get labels from the JSON,
+        # but your current JSON doesn't store labels explicitly, only the matrix.
+        # You might need to add a 'labels' key to your result_json.
+        # Example: result_json["labels"] = target_names # assuming target_names is defined
         plot_confusion_matrix(json_log_path)
     except Exception as e:
         print(f"Error plotting confusion matrix for {congress_year} seed {random_state}: {e}") # Added error message for clarity
@@ -379,23 +397,23 @@ def run_tfidf_pipeline(congress_year: str, config: dict, random_state: int):
 if __name__ == "__main__":
     config_path = Path(__file__).parent.parent / "config" / "svm_config.yaml"
     config = load_config(config_path)
-    
+
     split_params= config.get("data_params", {})
-    CONGRESS_YEAR_START = data_params.get('congress_year_start', 75) 
-    CONGRESS_YEAR_END = data_params.get('congress_year_end', 112) 
-    
+    CONGRESS_YEAR_START = data_params.get('congress_year_start', 75)
+    CONGRESS_YEAR_END = data_params.get('congress_year_end', 112)
+
     detailed_log_path = "logs/tfidf_svm_performance_detailed.csv"
     avg_log_path = "logs/tfidf_svm_performance_avg.csv"
     os.makedirs("logs", exist_ok=True) # Ensure logs directory exists
-    
+
     congress_years = [f"{i:03}" for i in range(CONGRESS_YEAR_START, CONGRESS_YEAR_END)]
-    
+
     # This ensures a clean file to append to for this batch of runs.
     if os.path.exists(detailed_log_path):
         os.remove(detailed_log_path)
         print(f"Deleted existing detailed log file: {detailed_log_path}")
-    
-for seed in SEEDS: # Outer loop: Iterate through each seed
+
+    for seed in SEEDS: # Outer loop: Iterate through each seed
         print(f"\n--- Starting runs for seed: {seed} ---")
         for year in congress_years: # Inner loop: Iterate through each year for the current seed
             try:
@@ -405,8 +423,8 @@ for seed in SEEDS: # Outer loop: Iterate through each seed
             except FileNotFoundError:
                 print(f"⚠️  Skipping Congress {year} (seed {seed}): CSV file not found.") # Added seed to message
             except Exception as e:
-                print(f"❌ An error occurred during pipeline run for Congress {year} with seed {seed}: {e}") 
-                
+                print(f"❌ An error occurred during pipeline run for Congress {year} with seed {seed}: {e}")
+
 # --- Calculate Averages per Year across Seeds ---
 try:
     # Read the detailed log file containing results for all seeds and years
@@ -447,5 +465,3 @@ except FileNotFoundError:
     print(f"Error: Detailed performance log not found at {detailed_log_path}. Cannot calculate averages or plot.")
 except Exception as e:
     print(f"An error occurred during calculating averages or plotting: {e}")
-
-
