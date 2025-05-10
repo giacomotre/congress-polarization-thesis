@@ -1,0 +1,58 @@
+# Unified Configuration File for Multiple Models
+
+# --- Common Parameters ---
+common:
+  split_params:
+    test_size: 0.15       # Proportion of data for test set (leave-out speakers)
+    validation_size: 0.25 # Proportion of remaining data for validation
+    random_state: 42      # Default random state
+    seeds: [42] #[42, 123, 789] List of random states to run with
+
+  data_params:
+    congress_year_start: 76 # Start year (inclusive)
+    congress_year_end: 78  # End year (exclusive)
+
+  party_map:
+    D: 0 # Democrat
+    R: 1 # Republican
+    # Add other parties if necessary; they will be excluded if not in this map
+    # I: 2 # Example for Independent
+
+
+# --- Model Specific Parameters and Tuning Grids ---
+
+bayes:
+  # TF-IDF Parameters specific to Bayes (default for instantiation)
+  tfidf_max_features: 10000
+  ngram_range: [1, 2]
+
+  # Hyperparameter Grids for Tuning TF-IDF (for Bayes pipeline)
+  tfidf_max_features_grid: [5000, 10000, 20000]
+  ngram_range_grid: [[1, 1], [1, 2]]
+
+  # Complement Naive Bayes specific parameters grid for tuning (example)
+  # bayes_alpha_grid: [0.1, 0.5, 1.0] # Uncomment and add to param_grid in run_model_pipeline if tuning alpha
+
+svm:
+  # TF-IDF Parameters specific to SVM (default for instantiation)
+  tfidf_max_features: 10000
+  ngram_range: [1, 2]
+
+  # Hyperparameter Grids for Tuning TF-IDF (for SVM pipeline)
+  tfidf_max_features_grid: [5000, 10000, 20000]
+  ngram_range_grid: [[1, 1], [1, 2]]
+
+  # Linear SVC specific parameters grid for tuning (example)
+  # svm_C_grid: [0.1, 1.0, 10.0] # Uncomment and add to param_grid in run_model_pipeline if tuning C
+
+logistic_regression:
+  # TF-IDF Parameters specific to Logistic Regression (default for instantiation)
+  tfidf_max_features: 10000
+  ngram_range: [1, 2]
+
+  # Hyperparameter Grids for Tuning TF-IDF (for Logistic Regression pipeline)
+  tfidf_max_features_grid: [5000, 10000, 20000]
+  ngram_range_grid: [[1, 1], [1, 2]]
+
+  # Logistic Regression specific parameters grid for tuning (L2 penalty)
+  lr_C_grid: [0.01, 0.1, 1.0, 10.0] # Inverse of regularization strength (C)
