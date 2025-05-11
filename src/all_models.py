@@ -139,7 +139,7 @@ def run_model_pipeline(X_train, y_train_encoded, X_val, y_val_encoded, X_test, y
 
     # Create the GridSearchCV object
     # Use accuracy as scoring metric for simplicity, can be changed
-    grid_search = GridSearchCV(pipeline, param_grid, cv=5, scoring='accuracy', verbose=1, n_jobs=-1)
+    grid_search = GridSearchCV(pipeline, param_grid, cv=5, scoring='accuracy', n_jobs=-1)
 
     grid_search.fit(X_train, y_train_encoded)
 
