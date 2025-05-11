@@ -10,9 +10,10 @@ from collections import Counter
 
 # Import necessary components from sklearn and cuml
 from sklearn.pipeline import Pipeline
-from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.model_selection import train_test_split # or use dask_ml's version if suitable for your data handling
 from sklearn.preprocessing import FunctionTransformer
 from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, confusion_matrix, classification_report
+from dask_ml.model_selection import GridSearchCV # Keep train_test_split from sklearn if you prefer
 from cuml.feature_extraction.text import TfidfVectorizer # Using cuML's TF-IDF
 from cuml.naive_bayes import ComplementNB # Using cuML's ComplementNB
 from cuml.svm import LinearSVC # Using cuML's LinearSVC
@@ -163,6 +164,20 @@ def run_model_pipeline(X_train, y_train_encoded, X_val, y_val_encoded, X_test, y
 
     # Train the best pipeline on the combined ORIGINAL training and validation data and ENCODED labels.
     final_pipeline = best_pipeline.fit(X_train_val_combined, y_train_val_combined_encoded)
+    
+    # --- Saving the trained pipeline ---
+    print(f"Saving the trained {model_type.upper()} pipeline...")
+    model_dir = "models"
+    os.makedirs(model_dir, exist_ok=True) # Ensure the models directory exists
+
+    # Create a descriptive filename
+    model_filename = f"{model_dir}/tfidf_{model_type}_{congress_year}_seed{random_state}_pipeline.joblib"
+
+    try:
+        joblib.dump(final_pipeline, model_filename) # for model explainability, the .joblib file is the model artifact.
+        print(f"Trained pipeline saved to {model_filename}")
+    except Exception as e:
+        print(f"Error saving the trained pipeline: {e}")
 
     final_train_time = time.time() - start_time_final_train
     print(f"Final model training complete in {final_train_time:.2f} seconds.")

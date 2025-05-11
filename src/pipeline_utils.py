@@ -103,6 +103,21 @@ def encode_labels_with_map(df: pd.DataFrame, party_map: Dict[str, int], party_co
 
     return df_processed
 
+# --- Utility for Loading Trained Pipelines ---
+def load_pipeline(model_dir: str, model_type: str, congress_year: str, seed: int):
+    """Loads a trained pipeline from a joblib file."""
+    model_filename = f"{model_dir}/tfidf_{model_type}_{congress_year}_seed{seed}_pipeline.joblib"
+    if not os.path.exists(model_filename):
+        print(f"Error: Model file not found at {model_filename}")
+        return None
+    try:
+        pipeline = joblib.load(model_filename)
+        print(f"Successfully loaded pipeline from {model_filename}")
+        return pipeline
+    except Exception as e:
+        print(f"Error loading pipeline from {model_filename}: {e}")
+        return None
+
 
 # --- Keep the old encode_labels if it's used elsewhere for LabelEncoder functionality ---
 # Or remove it if this new function is the only label encoding needed.
