@@ -378,7 +378,7 @@ if __name__ == "__main__":
                         continue
 
                     run_model_pipeline(X_train, y_train_encoded, X_val, y_val_encoded, X_test, y_test_encoded,
-                                       model_type=model_type, config=model_config, random_state=seed, congress_year=year, party_map=PARTY_MAP)
+                                       model_type=model_type, model_config=model_config, random_state=seed, congress_year=year, party_map=PARTY_MAP)
 
 
             except Exception as e:
@@ -410,10 +410,10 @@ if __name__ == "__main__":
             df_detailed['auc'] = pd.to_numeric(df_detailed['auc'], errors='coerce')
 
             # Calculate mean metrics per year, grouped by the 'year' column
-            df_avg = df_detailed.groupby('year')[['accuracy', 'f1_score', 'auc']].mean().reset_index()
+            df_avg = df_detailed.groupby('year')[['accuracy', 'f1_score', 'auc']].mean(numeric_only=True).reset_index()
 
             # Optional: Calculate standard deviation if you want to visualize variability later
-            df_std = df_detailed.groupby('year')[['accuracy', 'f1_score', 'auc']].std().reset_index()
+            df_std = df_detailed.groupby('year')[['accuracy', 'f1_score', 'auc']].std(numeric_only=True).reset_index()
             df_std.rename(columns={'accuracy':'accuracy_std', 'f1_score':'f1_score_std', 'auc':'auc_std'}, inplace=True)
             df_avg = df_avg.merge(df_std, on='year')
 
