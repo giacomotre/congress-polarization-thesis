@@ -65,8 +65,7 @@ def clean_text_for_bert(text: str) -> str:
 # --- Consistent Label Encoding using a Map (Simplified) ---
 def encode_labels_with_map(df: pd.DataFrame, party_map: Dict[str, int], party_col: str = "party", label_col: str = "label") -> pd.DataFrame:
     """
-    Encodes party labels to integers using a predefined map.
-    Assumes all parties in df[party_col] are present in party_map.
+    Encodes party labels to integers using a predefined map and handles unmapped parties by removing them.
 
     Args:
         df (pd.DataFrame): Input DataFrame with a party column.
@@ -75,41 +74,47 @@ def encode_labels_with_map(df: pd.DataFrame, party_map: Dict[str, int], party_co
         label_col (str): The name for the new column containing integer labels.
 
     Returns:
-        pd.DataFrame: DataFrame with the new integer label column.
+        pd.DataFrame: DataFrame with the new integer label column,
+                    and rows with parties not in the map removed.
     Raises:
         ValueError: If the party_col is not found in the DataFrame.
-        KeyError: If a party in df[party_col] is not found in party_map
-                  (this indicates the assumption of pre-cleaned data was violated).
     """
     if party_col not in df.columns:
         raise ValueError(f"Column '{party_col}' not found in the DataFrame.")
 
+    # Work on a copy to avoid modifying original df potentially passed by reference
     df_processed = df.copy()
+    initial_rows = len(df_processed)
 
-    # Apply the mapping.
-    # If a party in df_processed[party_col] is not a key in party_map,
-    # this will raise a KeyError if we don't handle it (e.g. by using .get with a default).
-    # However, based on your request, we assume all parties are in the map.
-    # If an unmapped party *does* appear, it's better to error out to highlight the data issue.
-    try:
-        df_processed[label_col] = df_processed[party_col].map(party_map)
-    except Exception as e: # Catching a generic exception, but a more specific one might be better if .map has a typical error for missing keys
-        # Re-raise or handle more specifically if .map itself doesn't raise KeyError directly for missing values.
-        # Pandas .map() will insert NaN for keys not found. We need to check for this.
-        print(f"Error during mapping. This might be due to an unexpected party not in party_map: {e}")
-        # Add a check for NaNs which indicate unmapped parties
-        if df_processed[label_col].isnull().any():
-            unmapped_parties = df_processed[df_processed[label_col].isnull()][party_col].unique()
-            raise KeyError(f"Unmapped parties found: {unmapped_parties}. "
-                           f"Ensure all parties in '{party_col}' are keys in party_map or clean the data.")
-        raise # Re-raise original error if it wasn't about NaNs
+    # Apply the mapping. .map() will replace values not in party_map with NaN.
+    df_processed[label_col] = df_processed[party_col].map(party_map)
 
-    # Ensure the new 'label' column is of integer type
-    # If any NaNs were introduced by .map (i.e., unmapped parties), .astype(int) would fail.
-    # The check above should prevent this if unmapped parties exist.
+    # --- Add this block back ---
+    # Drop rows where the party was not in the map (resulting in NaN in the label column)
+    original_rows = len(df_processed)
+    df_processed.dropna(subset=[label_col], inplace=True)
+    rows_dropped = original_rows - len(df_processed)
+
+    if rows_dropped > 0:
+        # Find which parties caused the drop (optional, but useful for debugging data)
+        unmapped_parties_in_df = set(df[party_col].unique()) - set(party_map.keys())
+        print(f"  - encode_labels_with_map: Removed {rows_dropped} rows with unmapped parties (e.g., {list(unmapped_parties_in_df)[:5]}...). Ensure PARTY_MAP in config is exhaustive if these should be included.")
+    # --- End of block to add back ---
+
+    # If all rows were dropped, return the empty DataFrame before trying astype
+    if df_processed.empty:
+        print(f"  - encode_labels_with_map: Warning - DataFrame is empty after removing rows with unmapped parties.")
+        # Ensure the label column exists even if empty, with an object dtype initially if empty,
+        # or skip astype if empty. Let's ensure it exists.
+        if label_col not in df_processed.columns:
+             df_processed[label_col] = pd.Series(dtype='object') # Or float/object if astype needs to handle it
+        return df_processed # Return the empty dataframe
+
+
+    # Ensure the new 'label' column is of integer type (safe now as NaNs are removed)
     df_processed[label_col] = df_processed[label_col].astype(int)
-    
-    # Optional: Remove the original 'party' column if you only need the integer 'label'
+
+    # Optional: Remove the original 'party' column
     # df_processed = df_processed.drop(columns=[party_col])
 
     return df_processed
