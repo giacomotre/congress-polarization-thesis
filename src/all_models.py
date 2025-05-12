@@ -87,9 +87,9 @@ for model_type, log_path in detailed_log_paths.items():
 
 # Function to run a single model pipeline
 def run_model_pipeline(
-    X_train_pd: pd.Series, y_train_encoded_pd: pd.Series, # These are now post-alignment
-    X_val_pd: pd.Series, y_val_encoded_pd: pd.Series,   # These are now post-alignment
-    X_test_pd: pd.Series, y_test_encoded_pd: pd.Series, # These are now post-alignment
+    X_train_pd: pd.Series, y_train_encoded_pd: pd.Series,
+    X_val_pd: pd.Series, y_val_encoded_pd: pd.Series,
+    X_test_pd: pd.Series, y_test_encoded_pd: pd.Series,
     model_type: str, model_config: dict, random_state: int, congress_year: str, party_map: dict,
     model_plot_output_dir: str
 ):
@@ -97,16 +97,17 @@ def run_model_pipeline(
     timing = {}
     start_time_total = time.time()
 
-    # 1. PRE-CLEANING (Pandas operations) - X data is already aligned with y from main loop
+    # 1. PRE-CLEANING (Pandas operations)
     print("Cleaning text data using pandas...")
-    # Input X_train_pd, X_val_pd, X_test_pd are already the correct, aligned speech columns
-    X_train_cleaned_pd = X_train_pd.apply(clean_text_for_tfidf) #
+    X_train_cleaned_pd = X_train_pd.apply(clean_text_for_tfidf)
 
-    # 2. CONVERT TRAINING DATA TO CUDF
-    print("Converting training data to cuDF...")
+    # 2. CONVERT TRAINING DATA (X to cuDF, y to NumPy)
+    print("Converting training data (X to cuDF, y to NumPy)...")
     X_train_cudf = cudf.Series(X_train_cleaned_pd)
-    y_train_encoded_cudf = cudf.Series(y_train_encoded_pd).astype(np.int32)
+    # ---> Convert y to NumPy for scikit-learn compatibility <---
+    y_train_encoded_np = y_train_encoded_pd.to_numpy().astype(np.int32)
 
+    # --- Pipeline Definition ---
     tfidf_step = TfidfVectorizer()
     model_step = None
     model_param_grid = {}
@@ -119,7 +120,7 @@ def run_model_pipeline(
         # model_param_grid[f'{model_type}__C'] = model_config.get('svm_C_grid', [0.1, 1.0, 10.0])
     elif model_type == 'lr':
         model_step = LogisticRegression(penalty='l2')
-        model_param_grid[f'{model_type}__C'] = model_config.get('lr_C_grid', [0.01, 0.1, 1.0, 10.0]) #
+        model_param_grid[f'{model_type}__C'] = model_config.get('lr_C_grid', [0.01, 0.1, 1.0, 10.0])
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
@@ -129,17 +130,19 @@ def run_model_pipeline(
     ])
     print(f"Pipeline created with cuML TF-IDF and {model_type.upper()}. (Text pre-cleaned)")
 
+    # --- Optimization (Hyperparameter Tuning) ---
     print("Starting hyperparameter tuning using GridSearchCV (n_jobs=1)...")
     start_time_tuning = time.time()
 
     param_grid = {
-        'tfidf__max_features': model_config.get("tfidf_max_features_grid", [5000, 10000, 20000]), #
-        'tfidf__ngram_range': [tuple(nr) for nr in model_config.get("ngram_range_grid", [[1, 1], [1, 2]])], #
+        'tfidf__max_features': model_config.get("tfidf_max_features_grid", [5000, 10000, 20000]),
+        'tfidf__ngram_range': [tuple(nr) for nr in model_config.get("ngram_range_grid", [[1, 1], [1, 2]])],
     }
     param_grid.update(model_param_grid)
 
     grid_search = GridSearchCV(pipeline, param_grid, cv=5, scoring='accuracy', n_jobs=1, verbose=1)
-    grid_search.fit(X_train_cudf, y_train_encoded_cudf)
+    # ---> Fit with cuDF features (X) and NumPy labels (y) <---
+    grid_search.fit(X_train_cudf, y_train_encoded_np)
 
     tuning_time = time.time() - start_time_tuning
     print(f"Hyperparameter tuning complete in {tuning_time:.2f} seconds.")
@@ -148,8 +151,8 @@ def run_model_pipeline(
 
     best_pipeline = grid_search.best_estimator_
 
+    # --- Final Model Training (on Combined Train/Validation Data) ---
     print("Preparing combined train/validation data for final model training...")
-    # Combine ALIGNED pandas Series (X_val_pd and y_val_encoded_pd could be empty if val set was empty)
     if not X_val_pd.empty:
         X_train_val_combined_pd = pd.concat([X_train_pd, X_val_pd], ignore_index=True)
         y_train_val_combined_encoded_pd = pd.concat([y_train_encoded_pd, y_val_encoded_pd], ignore_index=True)
@@ -157,16 +160,20 @@ def run_model_pipeline(
         X_train_val_combined_pd = X_train_pd.copy()
         y_train_val_combined_encoded_pd = y_train_encoded_pd.copy()
 
-    X_train_val_combined_cleaned_pd = X_train_val_combined_pd.apply(clean_text_for_tfidf) #
+    X_train_val_combined_cleaned_pd = X_train_val_combined_pd.apply(clean_text_for_tfidf)
     X_train_val_combined_cudf = cudf.Series(X_train_val_combined_cleaned_pd)
-    y_train_val_combined_encoded_cudf = cudf.Series(y_train_val_combined_encoded_pd).astype(np.int32)
+    # ---> Convert combined y also to NumPy for consistency <---
+    y_train_val_combined_encoded_np = y_train_val_combined_encoded_pd.to_numpy().astype(np.int32)
 
-    print("Training final model (best pipeline) on combined train/validation cuDF data...")
+    print("Training final model (best pipeline) on combined train/validation data (X=cuDF, y=NumPy)...")
     start_time_final_train = time.time()
-    final_pipeline = best_pipeline.fit(X_train_val_combined_cudf, y_train_val_combined_encoded_cudf)
+    # ---> Fit final pipeline with cuDF features (X) and NumPy labels (y) <---
+    final_pipeline = best_pipeline.fit(X_train_val_combined_cudf, y_train_val_combined_encoded_np)
     final_train_time = time.time() - start_time_final_train
     print(f"Final model training complete in {final_train_time:.2f} seconds.")
 
+    # --- Saving the trained pipeline ---
+    # (Save logic remains the same)
     print(f"Saving the trained {model_type.upper()} pipeline...")
     model_dir_path = Path("models")
     model_dir_path.mkdir(parents=True, exist_ok=True)
@@ -177,19 +184,25 @@ def run_model_pipeline(
     except Exception as e:
         print(f"Error saving the trained pipeline: {e}")
 
+    # --- Testing on Test Data ---
     print("Preparing test data for evaluation...")
-    X_test_cleaned_pd = X_test_pd.apply(clean_text_for_tfidf) #
+    X_test_cleaned_pd = X_test_pd.apply(clean_text_for_tfidf)
     X_test_cudf = cudf.Series(X_test_cleaned_pd)
-    
+    # y_test_encoded_pd is the original pandas Series of labels
+
     print("Evaluating final model on test cuDF data...")
     start_time_test = time.time()
     y_test_pred_gpu = final_pipeline.predict(X_test_cudf)
     evaluation_time = time.time() - start_time_test
     print(f"Evaluation complete in {evaluation_time:.2f} seconds.")
 
+    # Convert GPU predictions and CPU true labels to NumPy for scikit-learn metrics
     y_test_pred_cpu = cupy.asnumpy(y_test_pred_gpu)
-    y_test_encoded_cpu = y_test_encoded_pd.to_numpy()
+    # ---> y_test_encoded_cpu remains NumPy - this was already correct <---
+    y_test_encoded_cpu = y_test_encoded_pd.to_numpy().astype(np.int32)
 
+    # --- Calculate Metrics ---
+    # (Metrics calculation logic remains the same, using y_test_encoded_cpu and y_test_pred_cpu)
     final_accuracy = accuracy_score(y_test_encoded_cpu, y_test_pred_cpu)
     final_f1_weighted = f1_score(y_test_encoded_cpu, y_test_pred_cpu, average='weighted')
 
@@ -197,28 +210,29 @@ def run_model_pipeline(
     print(f"Accuracy: {final_accuracy:.4f}")
     print(f"Weighted F1 Score: {final_f1_weighted:.4f}")
 
+    # (AUC calculation logic remains the same)
     auc = None
     try:
-        # Access the model step correctly from the pipeline
         actual_model_in_pipeline = final_pipeline.named_steps[model_type]
         if hasattr(actual_model_in_pipeline, "predict_proba"):
-            probability_scores_gpu = final_pipeline.predict_proba(X_test_cudf) # Use final_pipeline
+            probability_scores_gpu = final_pipeline.predict_proba(X_test_cudf)
             probability_scores_cpu = cupy.asnumpy(probability_scores_gpu)
-            if len(np.unique(y_test_encoded_cpu)) == 2:
+            # ... (rest of AUC logic using y_test_encoded_cpu and probability_scores_cpu)
+            if len(np.unique(y_test_encoded_cpu)) == 2: # Binary classification
                 auc = roc_auc_score(y_test_encoded_cpu, probability_scores_cpu[:, 1])
-            else:
+            else: # Multi-class
                 from sklearn.preprocessing import LabelBinarizer
                 lb = LabelBinarizer().fit(y_test_encoded_cpu)
                 y_test_encoded_onehot_cpu = lb.transform(y_test_encoded_cpu)
                 if y_test_encoded_onehot_cpu.shape[1] == probability_scores_cpu.shape[1]:
                     auc = roc_auc_score(y_test_encoded_onehot_cpu, probability_scores_cpu, average='macro', multi_class='ovr')
-                else: # Fallback if predict_proba gives 1D array for binary case handled by LabelBinarizer as 2 cols
-                    if probability_scores_cpu.ndim == 1 and y_test_encoded_onehot_cpu.shape[1] == 2 : # common for binary
-                         auc = roc_auc_score(y_test_encoded_cpu, probability_scores_cpu) # use original y_test_encoded_cpu
-                    else:
-                        print(f"Warning: Shape mismatch for multi-class AUC. y_onehot: {y_test_encoded_onehot_cpu.shape}, probs: {probability_scores_cpu.shape}")
-        elif hasattr(actual_model_in_pipeline, "decision_function"):
-            decision_scores_gpu = final_pipeline.decision_function(X_test_cudf) # Use final_pipeline
+                elif probability_scores_cpu.ndim == 1 and y_test_encoded_onehot_cpu.shape[1] == 2 :
+                         auc = roc_auc_score(y_test_encoded_cpu, probability_scores_cpu)
+                else:
+                    print(f"Warning: Shape mismatch for multi-class AUC. y_onehot: {y_test_encoded_onehot_cpu.shape}, probs: {probability_scores_cpu.shape}")
+
+        elif hasattr(actual_model_in_pipeline, "decision_function"): # For SVM etc.
+            decision_scores_gpu = final_pipeline.decision_function(X_test_cudf)
             decision_scores_cpu = cupy.asnumpy(decision_scores_gpu)
             if len(np.unique(y_test_encoded_cpu)) == 2:
                  auc = roc_auc_score(y_test_encoded_cpu, decision_scores_cpu)
@@ -228,6 +242,8 @@ def run_model_pipeline(
         print(f"Could not calculate ROC-AUC for {model_type}: {e}")
         auc = None
 
+
+    # (Confusion matrix, classification report, logging remain the same)
     cm_cpu = confusion_matrix(y_test_encoded_cpu, y_test_pred_cpu)
     cm_list = cm_cpu.tolist()
 
@@ -252,6 +268,7 @@ def run_model_pipeline(
     with open(current_detailed_log_path, "a") as f:
         f.write(f"{random_state},{congress_year},{final_accuracy:.4f},{final_f1_weighted:.4f},{auc if auc is not None else 'NA'}\n")
 
+    # (JSON logging and confusion matrix plotting remain the same)
     result_json = {
         "seed": random_state, "year": congress_year, "accuracy": round(final_accuracy, 4),
         "f1_score": round(final_f1_weighted, 4), "auc": round(auc, 4) if auc is not None else "NA",
@@ -267,10 +284,13 @@ def run_model_pipeline(
         json.dump(result_json, jf, indent=4)
 
     try:
-        plot_confusion_matrix(str(json_log_path), output_dir=model_plot_output_dir) #
+        plot_confusion_matrix(str(json_log_path), output_dir=model_plot_output_dir) # Pass output dir
     except Exception as e:
         print(f"Error plotting confusion matrix for {model_type} {congress_year} seed {random_state}: {e}")
+
     return result_json
+
+# (The rest of the __main__ block in all_models.py remains the same)
 
 # ------ Main Execution -------
 if __name__ == "__main__":
