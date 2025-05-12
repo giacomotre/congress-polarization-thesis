@@ -96,6 +96,14 @@ def encode_labels_with_map(df: pd.DataFrame, party_map: Dict[str, int], party_co
     rows_dropped = original_rows - len(df_processed)
 
     if rows_dropped > 0:
+        #-------------- CHECK-------------------
+        # Find which parties caused the drop
+        all_parties_in_df = set(df[party_col].unique()) # Get all unique party values from original df column
+        mapped_parties_in_map = set(party_map.keys())
+        unmapped_parties_found = all_parties_in_df - mapped_parties_in_map # Correctly identify unmapped ones
+        #-------------- CHECK-------------------
+        # Show actual unmapped party values found in the data
+        print(f"  - encode_labels_with_map: Removed {rows_dropped} rows with unmapped parties (e.g., {list(unmapped_parties_found)[:5]}...). Ensure PARTY_MAP in config is exhaustive if these should be included.")
         # Find which parties caused the drop (optional, but useful for debugging data)
         unmapped_parties_in_df = set(df[party_col].unique()) - set(party_map.keys())
         print(f"  - encode_labels_with_map: Removed {rows_dropped} rows with unmapped parties (e.g., {list(unmapped_parties_in_df)[:5]}...). Ensure PARTY_MAP in config is exhaustive if these should be included.")
