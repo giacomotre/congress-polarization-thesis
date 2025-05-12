@@ -62,10 +62,11 @@ def clean_text_for_bert(text: str) -> str:
         return "" # Handle non-string input gracefully
     return re.sub(r"\s+", " ", text).strip()
 
-# --- Consistent Label Encoding using a Map ---
+# --- Consistent Label Encoding using a Map (Simplified) ---
 def encode_labels_with_map(df: pd.DataFrame, party_map: Dict[str, int], party_col: str = "party", label_col: str = "label") -> pd.DataFrame:
     """
-    Encodes party labels to integers using a predefined map and handles unmapped parties.
+    Encodes party labels to integers using a predefined map.
+    Assumes all parties in df[party_col] are present in party_map.
 
     Args:
         df (pd.DataFrame): Input DataFrame with a party column.
@@ -74,32 +75,42 @@ def encode_labels_with_map(df: pd.DataFrame, party_map: Dict[str, int], party_co
         label_col (str): The name for the new column containing integer labels.
 
     Returns:
-        pd.DataFrame: DataFrame with the new integer label column,
-                    and rows with parties not in the map removed.
+        pd.DataFrame: DataFrame with the new integer label column.
     Raises:
         ValueError: If the party_col is not found in the DataFrame.
+        KeyError: If a party in df[party_col] is not found in party_map
+                  (this indicates the assumption of pre-cleaned data was violated).
     """
     if party_col not in df.columns:
         raise ValueError(f"Column '{party_col}' not found in the DataFrame.")
 
-    initial_rows = len(df)
+    df_processed = df.copy()
 
-    # Apply the mapping. .map() will replace values not in party_map with NaN.
-    df_processed = df.copy() # Work on a copy to avoid modifying original df in place outside this function
-    df_processed[label_col] = df_processed[party_col].map(party_map)
-
-    # Drop rows where the party was not in the map (resulting in NaN in the label column)
-    df_processed.dropna(subset=[label_col], inplace=True)
-
-    removed_unmapped_count = initial_rows - len(df_processed)
-    if removed_unmapped_count > 0:
-        print(f"  - encode_labels_with_map: Removed {removed_unmapped_count} rows with parties not in the provided PARTY_MAP.")
+    # Apply the mapping.
+    # If a party in df_processed[party_col] is not a key in party_map,
+    # this will raise a KeyError if we don't handle it (e.g. by using .get with a default).
+    # However, based on your request, we assume all parties are in the map.
+    # If an unmapped party *does* appear, it's better to error out to highlight the data issue.
+    try:
+        df_processed[label_col] = df_processed[party_col].map(party_map)
+    except Exception as e: # Catching a generic exception, but a more specific one might be better if .map has a typical error for missing keys
+        # Re-raise or handle more specifically if .map itself doesn't raise KeyError directly for missing values.
+        # Pandas .map() will insert NaN for keys not found. We need to check for this.
+        print(f"Error during mapping. This might be due to an unexpected party not in party_map: {e}")
+        # Add a check for NaNs which indicate unmapped parties
+        if df_processed[label_col].isnull().any():
+            unmapped_parties = df_processed[df_processed[label_col].isnull()][party_col].unique()
+            raise KeyError(f"Unmapped parties found: {unmapped_parties}. "
+                           f"Ensure all parties in '{party_col}' are keys in party_map or clean the data.")
+        raise # Re-raise original error if it wasn't about NaNs
 
     # Ensure the new 'label' column is of integer type
+    # If any NaNs were introduced by .map (i.e., unmapped parties), .astype(int) would fail.
+    # The check above should prevent this if unmapped parties exist.
     df_processed[label_col] = df_processed[label_col].astype(int)
-
+    
     # Optional: Remove the original 'party' column if you only need the integer 'label'
-    # df_processed = df_processed.drop(columns=[party_col]) # Decide if you want to keep or drop original party column
+    # df_processed = df_processed.drop(columns=[party_col])
 
     return df_processed
 
