@@ -13,7 +13,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split # or use dask_ml's version if suitable for your data handling
 from sklearn.preprocessing import FunctionTransformer
 from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, confusion_matrix, classification_report
-from dask_ml.model_selection import GridSearchCV # Keep train_test_split from sklearn if you prefer
+from sklearn.model_selection import GridSearchCV 
 from cuml.feature_extraction.text import TfidfVectorizer # Using cuML's TF-IDF
 from cuml.naive_bayes import ComplementNB # Using cuML's ComplementNB
 from cuml.svm import LinearSVC # Using cuML's LinearSVC
