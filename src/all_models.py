@@ -88,9 +88,9 @@ for model_type, log_path in detailed_log_paths.items():
 
 # Function to run a single model pipeline
 def run_model_pipeline(
-    X_train_pd: pd.Series, y_train_pd: pd.Series, # Pass original pandas y_train, not encoded yet
-    X_val_pd: pd.Series, y_val_pd: pd.Series,
-    X_test_pd: pd.Series, y_test_pd: pd.Series,
+    X_train_pd: pd.Series, y_train_encoded_pd: pd.Series, # ALREADY ENCODED
+    X_val_pd: pd.Series, y_val_encoded_pd: pd.Series,   # ALREADY ENCODED
+    X_test_pd: pd.Series, y_test_encoded_pd: pd.Series, # ALREADY ENCODED
     model_type: str, model_config: dict, random_state: int, congress_year: str, party_map: dict,
     model_plot_output_dir: str
 ):
@@ -111,21 +111,15 @@ def run_model_pipeline(
     param_combinations.update(model_specific_grid)
     grid = ParameterGrid(param_combinations)
 
-    # 2. Prepare Full Training Data (Train + Validation for CV)
-    # Combine original pandas Series
+    # 2. Prepare Full Training Data (Combine ALREADY ENCODED train + val sets)
     if not X_val_pd.empty:
-        X_train_val_combined_pd = pd.concat([X_train_pd, X_val_pd], ignore_index=True)
-        y_train_val_combined_pd = pd.concat([y_train_pd, y_val_pd], ignore_index=True)
+        X_train_val_combined_pd_aligned = pd.concat([X_train_pd, X_val_pd], ignore_index=True)
+        # --> Use the already encoded y Series <--
+        y_train_val_encoded_pd_aligned = pd.concat([y_train_encoded_pd, y_val_encoded_pd], ignore_index=True)
     else:
-        X_train_val_combined_pd = X_train_pd.copy()
-        y_train_val_combined_pd = y_train_pd.copy()
-
-    # Encode labels ONCE for the combined training data
-    train_val_data_to_encode = pd.DataFrame({'party': y_train_val_combined_pd, 'speech': X_train_val_combined_pd})
-    train_val_encoded_df = encode_labels_with_map(train_val_data_to_encode, party_map)
-    # Ensure alignment after potential row drops by encode_labels_with_map (even simplified version)
-    X_train_val_combined_pd_aligned = train_val_encoded_df['speech'].reset_index(drop=True)
-    y_train_val_encoded_pd_aligned = train_val_encoded_df['label'].reset_index(drop=True)
+        X_train_val_combined_pd_aligned = X_train_pd.copy()
+        # --> Use the already encoded y Series <--
+        y_train_val_encoded_pd_aligned = y_train_encoded_pd.copy()
 
     if X_train_val_combined_pd_aligned.empty or y_train_val_encoded_pd_aligned.empty:
          print("Error: Combined train/validation data is empty after encoding.")
@@ -134,7 +128,6 @@ def run_model_pipeline(
     # 3. Manual Cross-Validation Loop
     n_splits = 5 # Or get from config
     kf = KFold(n_splits=n_splits, shuffle=True, random_state=random_state)
-    
     best_score = -1
     best_params = None
     results = [] # To store results for each param combination
