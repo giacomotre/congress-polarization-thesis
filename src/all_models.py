@@ -12,20 +12,22 @@ import cupy
 
 from sklearn.pipeline import Pipeline # Pipeline is imported but not directly used for model definition here
 from sklearn.model_selection import train_test_split
+# Ensure all necessary sklearn.metrics are imported
 from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, confusion_matrix, classification_report
 
 from sklearn.model_selection import KFold, ParameterGrid
-from cuml.feature_extraction.text import TfidfVectorizer
+from cuml.feature_extraction.text import TfidfVectorizer # Keeping cuML TfidfVectorizer
 from cuml.naive_bayes import ComplementNB
-from cuml.svm import LinearSVC
+# from cuml.svm import LinearSVC # Removed cuML SVM
+from sklearn.svm import SVC  # Using scikit-learn SVC
 from cuml.linear_model import LogisticRegression
-from cuml.metrics import accuracy_score as cuml_accuracy_score
-from cuml.metrics import confusion_matrix as cuml_confusion_matrix
+from cuml.metrics import accuracy_score as cuml_accuracy_score # For other cuML models
+from cuml.metrics import confusion_matrix as cuml_confusion_matrix # For other cuML models
 
 # Import utility functions
 from config_loader import load_config
-from pipeline_utils import encode_labels_with_map 
-from plotting_utils import plot_performance_metrics, plot_confusion_matrix #
+from pipeline_utils import encode_labels_with_map
+from plotting_utils import plot_performance_metrics, plot_confusion_matrix
 
 # ------ Loading Unified Config -------
 CONFIG_PATH_UNIFIED = Path(__file__).resolve().parent.parent / "config" / "config.yaml"
@@ -43,22 +45,22 @@ split_params = common_params.get('split_params', {})
 TEST_SIZE = split_params.get('test_size', 0.15)
 VALIDATION_SIZE = split_params.get('validation_size', 0.25)
 DEFAULT_RANDOM_STATE = split_params.get('random_state', 42)
-SEEDS = split_params.get('seeds', [DEFAULT_RANDOM_STATE]) #
+SEEDS = split_params.get('seeds', [DEFAULT_RANDOM_STATE])
 
 data_params = common_params.get('data_params', {})
-CONGRESS_YEAR_START = data_params.get('congress_year_start', 75) #
-CONGRESS_YEAR_END = data_params.get('congress_year_end', 112) #
+CONGRESS_YEAR_START = data_params.get('congress_year_start', 75)
+CONGRESS_YEAR_END = data_params.get('congress_year_end', 112)
 
-PARTY_MAP = common_params.get('party_map', {}) #
+PARTY_MAP = common_params.get('party_map', {})
 if not PARTY_MAP or not all(party in PARTY_MAP for party in ['D', 'R']):
     print("Warning: PARTY_MAP in config is missing or incomplete. Ensure D and R are mapped.")
 
 
 # --- Define Model Configurations Dictionary ---
 model_configs = {
-    'bayes': unified_config.get('bayes', {}), #
-    'svm': unified_config.get('svm', {}), #
-    'lr': unified_config.get('logistic_regression', {}) #
+    'bayes': unified_config.get('bayes', {}),
+    'svm': unified_config.get('svm', {}), # Config for SVM might need adjustment for sklearn.svm.SVC params
+    'lr': unified_config.get('logistic_regression', {})
 }
 
 # Ensure logs directory exists
@@ -70,7 +72,6 @@ detailed_log_paths = {
     'lr': "logs/tfidf_lr_performance_detailed.csv"
 }
 
-# This dictionary will also be used for plot output directories
 model_plotting_info = {
     'bayes': {"avg_log_path": detailed_log_paths['bayes'].replace("_detailed.csv", "_avg.csv"), "output_dir": "plots/bayes"},
     'svm': {"avg_log_path": detailed_log_paths['svm'].replace("_detailed.csv", "_avg.csv"), "output_dir": "plots/svm"},
@@ -87,9 +88,9 @@ for model_type, log_path in detailed_log_paths.items():
 
 # --- Define model function ---
 def run_model_pipeline(
-    X_train_pd_cleaned: pd.Series, y_train_encoded_pd: pd.Series, # Assuming X_train_pd_cleaned is ALREADY CLEANED
-    X_val_pd_cleaned: pd.Series, y_val_encoded_pd: pd.Series,   # Assuming X_val_pd_cleaned is ALREADY CLEANED
-    X_test_pd_cleaned: pd.Series, y_test_encoded_pd: pd.Series, # Assuming X_test_pd_cleaned is ALREADY CLEANED
+    X_train_pd_cleaned: pd.Series, y_train_encoded_pd: pd.Series,
+    X_val_pd_cleaned: pd.Series, y_val_encoded_pd: pd.Series,
+    X_test_pd_cleaned: pd.Series, y_test_encoded_pd: pd.Series,
     model_type: str, model_config: dict, random_state: int, congress_year: str, party_map: dict,
     model_plot_output_dir: str
 ):
@@ -97,20 +98,22 @@ def run_model_pipeline(
     timing = {}
     start_time_total = time.time()
 
-    # 1. Define Hyperparameter Grid (using model_config)
     param_combinations = {
         'tfidf__max_features': model_config.get("tfidf_max_features_grid", [10000]),
         'tfidf__ngram_range': [tuple(nr) for nr in model_config.get("ngram_range_grid", [[1, 2]])],
     }
     model_specific_grid = {}
     if model_type == 'lr':
-        model_specific_grid['model__C'] = model_config.get('lr_C_grid', [1.0])
+        model_specific_grid['model__C'] = model_config.get('lr_C_grid', [1.0]) # Assuming C for Logistic Regression
+    elif model_type == 'svm':
+        # Assuming your config provides a 'C_grid' or similar for SVM.
+        # sklearn.svm.SVC uses 'C'. Adjust if your config key is different (e.g., 'svm_C_grid')
+        model_specific_grid['model__C'] = model_config.get('svm_C_grid', model_config.get('C_grid', [1.0]))
     # Add other model params here ('model__param_name')
 
     param_combinations.update(model_specific_grid)
     grid = ParameterGrid(param_combinations)
 
-    # 2. Prepare Full Training Data (Combine ALREADY CLEANED & ENCODED train + val sets)
     if not X_val_pd_cleaned.empty:
         X_train_val_combined_pd_cleaned = pd.concat([X_train_pd_cleaned, X_val_pd_cleaned], ignore_index=True)
         y_train_val_encoded_pd_aligned = pd.concat([y_train_encoded_pd, y_val_encoded_pd], ignore_index=True)
@@ -120,14 +123,13 @@ def run_model_pipeline(
 
     if X_train_val_combined_pd_cleaned.empty or y_train_val_encoded_pd_aligned.empty:
         print("Error: Combined train/validation data is empty after encoding.")
-        return None # Or handle appropriately
+        return None
 
-    # 3. Manual Cross-Validation Loop
-    n_splits = 5 # Or get from config
+    n_splits = 5
     kf = KFold(n_splits=n_splits, shuffle=True, random_state=random_state)
     best_score = -1
     best_params = None
-    results = [] # To store results for each param combination
+    results = []
 
     print(f"Starting manual {n_splits}-fold cross-validation for hyperparameter tuning...")
     start_time_tuning = time.time()
@@ -135,64 +137,88 @@ def run_model_pipeline(
     for params in grid:
         print(f"  Testing params: {params}")
         fold_scores = []
-
-        # Extract params for TF-IDF and Model
         tfidf_params = {k.split('__')[1]: v for k, v in params.items() if k.startswith('tfidf__')}
-        model_params = {k.split('__')[1]: v for k, v in params.items() if k.startswith('model__')}
+        model_params_from_grid = {k.split('__')[1]: v for k, v in params.items() if k.startswith('model__')}
 
         fold_num = 0
         for train_idx, val_idx in kf.split(X_train_val_combined_pd_cleaned, y_train_val_encoded_pd_aligned):
             fold_num += 1
-            # print(f"       Fold {fold_num}/{n_splits}")
-
-            # Get pandas folds for this iteration (text is already cleaned)
             X_train_fold_pd = X_train_val_combined_pd_cleaned.iloc[train_idx]
             y_train_fold_pd = y_train_val_encoded_pd_aligned.iloc[train_idx]
             X_val_fold_pd = X_train_val_combined_pd_cleaned.iloc[val_idx]
             y_val_fold_pd = y_train_val_encoded_pd_aligned.iloc[val_idx]
 
+            # To be defined in the try block
+            model_instance = None
+            X_train_tfidf_gpu, X_val_tfidf_gpu = None, None
+            X_train_tfidf_cpu_sparse, X_val_tfidf_cpu_sparse = None, None
+            y_train_fold_cpu = None
+            y_pred_val_gpu = None
+
+
             try:
-                # Text is already cleaned, directly convert to cuDF
                 X_train_fold_cudf = cudf.Series(X_train_fold_pd)
                 y_train_fold_cupy = cupy.asarray(y_train_fold_pd.to_numpy(dtype=np.int32))
                 X_val_fold_cudf = cudf.Series(X_val_fold_pd)
                 y_val_fold_cupy = cupy.asarray(y_val_fold_pd.to_numpy(dtype=np.int32))
 
-                # Instantiate cuML components with current params
-                tfidf_vectorizer = TfidfVectorizer(**tfidf_params)
+                cv_tfidf_vectorizer = TfidfVectorizer(**tfidf_params) # cuml.TfidfVectorizer
+                X_train_tfidf_gpu = cv_tfidf_vectorizer.fit_transform(X_train_fold_cudf)
+                X_val_tfidf_gpu = cv_tfidf_vectorizer.transform(X_val_fold_cudf)
+
+                current_score = 0.0
+                y_pred_val_cpu_fold = None # Prediction on validation fold
 
                 if model_type == 'bayes':
-                    model = ComplementNB(**model_params)
+                    model_instance = ComplementNB(**model_params_from_grid)
+                    model_instance.fit(X_train_tfidf_gpu, y_train_fold_cupy)
+                    y_pred_val_gpu = model_instance.predict(X_val_tfidf_gpu)
+                    y_pred_val_cpu_fold = cupy.asnumpy(y_pred_val_gpu)
+                    current_score = cuml_accuracy_score(cupy.asnumpy(y_val_fold_cupy), y_pred_val_cpu_fold)
                 elif model_type == 'svm':
-                    model = LinearSVC(**model_params)
+                    # Use sklearn.svm.SVC
+                    sklearn_svm_cv_params = {'random_state': random_state, 'kernel': 'linear', 'probability': True}
+                    if 'C' in model_params_from_grid: # Get C from grid if specified
+                        sklearn_svm_cv_params['C'] = model_params_from_grid['C']
+
+                    model_instance = SVC(**sklearn_svm_cv_params)
+
+                    # Convert data for scikit-learn
+                    # Using .tocsr().get() for sparse matrix conversion from cuPy to SciPy
+                    X_train_tfidf_cpu_sparse = X_train_tfidf_gpu.tocsr().get()
+                    y_train_fold_cpu = cupy.asnumpy(y_train_fold_cupy)
+                    X_val_tfidf_cpu_sparse = X_val_tfidf_gpu.tocsr().get()
+
+                    model_instance.fit(X_train_tfidf_cpu_sparse, y_train_fold_cpu)
+                    y_pred_val_cpu_fold = model_instance.predict(X_val_tfidf_cpu_sparse)
+                    current_score = accuracy_score(cupy.asnumpy(y_val_fold_cupy), y_pred_val_cpu_fold) # sklearn.metrics
                 elif model_type == 'lr':
-                    model = LogisticRegression(penalty='l2', **model_params)
+                    model_instance = LogisticRegression(penalty='l2', **model_params_from_grid)
+                    model_instance.fit(X_train_tfidf_gpu, y_train_fold_cupy)
+                    y_pred_val_gpu = model_instance.predict(X_val_tfidf_gpu)
+                    y_pred_val_cpu_fold = cupy.asnumpy(y_pred_val_gpu)
+                    current_score = cuml_accuracy_score(cupy.asnumpy(y_val_fold_cupy), y_pred_val_cpu_fold)
                 else:
                     raise ValueError(f"Unknown model type: {model_type}")
 
-                # Fit TF-IDF and transform
-                X_train_tfidf = tfidf_vectorizer.fit_transform(X_train_fold_cudf)
-                X_val_tfidf = tfidf_vectorizer.transform(X_val_fold_cudf)
-
-                # Fit Model
-                model.fit(X_train_tfidf, y_train_fold_cupy)
-
-                # Predict on validation fold
-                y_pred_val_gpu = model.predict(X_val_tfidf)
-
-                # Evaluate
-                y_pred_val_cpu = cupy.asnumpy(y_pred_val_gpu)
-                y_val_fold_cpu = cupy.asnumpy(y_val_fold_cupy)
-                score = cuml_accuracy_score(y_val_fold_cpu, y_pred_val_cpu)
-                fold_scores.append(score)
-                
-                del X_train_fold_cudf, y_train_fold_cupy, X_val_fold_cudf, y_val_fold_cupy
-                del X_train_tfidf, X_val_tfidf, y_pred_val_gpu, model, tfidf_vectorizer
-                cupy.get_default_memory_pool().free_all_blocks()
+                fold_scores.append(current_score)
 
             except Exception as fold_e:
                 print(f"       Error in Fold {fold_num} for params {params}: {fold_e}")
-                fold_scores.append(0) # Assign 0 score if fold fails
+                import traceback
+                traceback.print_exc()
+                fold_scores.append(0)
+            finally: # Ensure cleanup
+                del X_train_fold_cudf, y_train_fold_cupy, X_val_fold_cudf, y_val_fold_cupy
+                del X_train_tfidf_gpu, X_val_tfidf_gpu
+                if X_train_tfidf_cpu_sparse is not None: del X_train_tfidf_cpu_sparse
+                if X_val_tfidf_cpu_sparse is not None: del X_val_tfidf_cpu_sparse
+                if y_train_fold_cpu is not None: del y_train_fold_cpu
+                if y_pred_val_gpu is not None: del y_pred_val_gpu
+                if 'cv_tfidf_vectorizer' in locals(): del cv_tfidf_vectorizer
+                if model_instance is not None: del model_instance
+                cupy.get_default_memory_pool().free_all_blocks()
+
 
         avg_score = np.mean(fold_scores) if fold_scores else 0
         print(f"  Params: {params} -> Avg CV Score: {avg_score:.4f}")
@@ -211,29 +237,37 @@ def run_model_pipeline(
         print("Warning: No best parameters found (tuning may have failed).")
         return None
 
-    # --- Final Model Training (using best_params and ALREADY CLEANED combined data) ---
     print("Training final model using best parameters found...")
     start_time_final_train = time.time()
 
-    # Data is X_train_val_combined_pd_cleaned and y_train_val_encoded_pd_aligned
     X_train_val_final_cudf = cudf.Series(X_train_val_combined_pd_cleaned)
     y_train_val_final_cupy = cupy.asarray(y_train_val_encoded_pd_aligned.to_numpy(dtype=np.int32))
 
-    best_tfidf_params = {k.split('__')[1]: v for k, v in best_params.items() if k.startswith('tfidf__')}
-    best_model_params = {k.split('__')[1]: v for k, v in best_params.items() if k.startswith('model__')}
+    best_tfidf_params_final = {k.split('__')[1]: v for k, v in best_params.items() if k.startswith('tfidf__')}
+    best_model_params_final = {k.split('__')[1]: v for k, v in best_params.items() if k.startswith('model__')}
 
-    final_tfidf = TfidfVectorizer(**best_tfidf_params)
+    final_tfidf_vectorizer = TfidfVectorizer(**best_tfidf_params_final) # cuml.TfidfVectorizer
+    X_train_val_final_tfidf_gpu = final_tfidf_vectorizer.fit_transform(X_train_val_final_cudf)
+    final_model_instance = None # To ensure it's defined for del
+
     if model_type == 'bayes':
-        final_model = ComplementNB(**best_model_params)
+        final_model_instance = ComplementNB(**best_model_params_final)
+        final_model_instance.fit(X_train_val_final_tfidf_gpu, y_train_val_final_cupy)
     elif model_type == 'svm':
-        final_model = LinearSVC(**best_model_params)
+        sklearn_svm_final_params = {'random_state': random_state, 'kernel': 'linear', 'probability': True}
+        if 'C' in best_model_params_final:
+            sklearn_svm_final_params['C'] = best_model_params_final['C']
+
+        final_model_instance = SVC(**sklearn_svm_final_params) # sklearn.svm.SVC
+        X_train_val_final_tfidf_cpu_sparse = X_train_val_final_tfidf_gpu.tocsr().get()
+        y_train_val_final_cpu = cupy.asnumpy(y_train_val_final_cupy)
+        final_model_instance.fit(X_train_val_final_tfidf_cpu_sparse, y_train_val_final_cpu)
+        del X_train_val_final_tfidf_cpu_sparse, y_train_val_final_cpu # Cleanup CPU copies
     elif model_type == 'lr':
-        final_model = LogisticRegression(penalty='l2', **best_model_params)
+        final_model_instance = LogisticRegression(penalty='l2', **best_model_params_final)
+        final_model_instance.fit(X_train_val_final_tfidf_gpu, y_train_val_final_cupy)
     else:
         raise ValueError(f"Unknown model type: {model_type}")
-
-    X_train_val_final_tfidf = final_tfidf.fit_transform(X_train_val_final_cudf)
-    final_model.fit(X_train_val_final_tfidf, y_train_val_final_cupy)
 
     final_train_time = time.time() - start_time_final_train
     print(f"Final model training complete in {final_train_time:.2f} seconds.")
@@ -244,123 +278,163 @@ def run_model_pipeline(
     tfidf_filename = model_dir_path / f"tfidf_{model_type}_{congress_year}_seed{random_state}_vectorizer.joblib"
     model_filename = model_dir_path / f"tfidf_{model_type}_{congress_year}_seed{random_state}_model.joblib"
     try:
-        joblib.dump(final_tfidf, tfidf_filename)
-        joblib.dump(final_model, model_filename)
+        joblib.dump(final_tfidf_vectorizer, tfidf_filename)
+        joblib.dump(final_model_instance, model_filename)
         print(f"Final TF-IDF saved to {tfidf_filename}")
         print(f"Final Model saved to {model_filename}")
     except Exception as e:
         print(f"Error saving the final components: {e}")
 
-    # --- Testing on Test Data (X_test_pd_cleaned is ALREADY CLEANED) ---
     print("Preparing test data for evaluation...")
-    # y_test_encoded_pd comes in as already encoded from main.
-    # X_test_pd_cleaned comes in as already cleaned from main.
-
-    if X_test_pd_cleaned.empty: # X_test_pd_cleaned is already aligned and cleaned
+    if X_test_pd_cleaned.empty:
         print("Error: Test data (X_test_pd_cleaned) is empty.")
+        if 'X_train_val_final_tfidf_gpu' in locals(): del X_train_val_final_tfidf_gpu
+        if 'final_tfidf_vectorizer' in locals(): del final_tfidf_vectorizer
+        if 'final_model_instance' in locals(): del final_model_instance
+        if 'X_train_val_final_cudf' in locals(): del X_train_val_final_cudf
+        if 'y_train_val_final_cupy' in locals(): del y_train_val_final_cupy
+        cupy.get_default_memory_pool().free_all_blocks()
         return None
 
-    # Test text is already cleaned
-    X_test_cudf = cudf.Series(X_test_pd_cleaned)
-    y_test_encoded_cpu = y_test_encoded_pd.to_numpy(dtype=np.int32) # y_test_encoded_pd is passed in
+    X_test_cudf_eval = cudf.Series(X_test_pd_cleaned)
+    y_test_encoded_cpu_eval = y_test_encoded_pd.to_numpy(dtype=np.int32)
 
-    print("Evaluating final model on test cuDF data...")
+    print("Evaluating final model on test data...")
     start_time_test = time.time()
-    X_test_final_tfidf = final_tfidf.transform(X_test_cudf)
-    y_test_pred_gpu = final_model.predict(X_test_final_tfidf)
+    X_test_final_tfidf_gpu_eval = final_tfidf_vectorizer.transform(X_test_cudf_eval) # Output from cuML TfidfVectorizer
+
+    y_test_pred_cpu_eval = None
+    final_accuracy_eval, final_f1_weighted_eval, auc_eval = 0.0, 0.0, None
+    cm_cpu_eval = None
+    probability_scores_cpu_eval = None # For sklearn SVM AUC
+    decision_scores_cpu_eval = None    # For sklearn SVM AUC
+
+    if model_type == 'svm':
+        X_test_final_tfidf_cpu_sparse_eval = X_test_final_tfidf_gpu_eval.tocsr().get() # Convert to SciPy sparse
+        y_test_pred_cpu_eval = final_model_instance.predict(X_test_final_tfidf_cpu_sparse_eval)
+
+        try:
+            if hasattr(final_model_instance, "predict_proba"):
+                probability_scores_cpu_eval = final_model_instance.predict_proba(X_test_final_tfidf_cpu_sparse_eval)
+                if len(np.unique(y_test_encoded_cpu_eval)) == 2:
+                    auc_eval = roc_auc_score(y_test_encoded_cpu_eval, probability_scores_cpu_eval[:, 1])
+                else:
+                    from sklearn.preprocessing import LabelBinarizer
+                    lb = LabelBinarizer().fit(y_test_encoded_cpu_eval)
+                    y_test_encoded_onehot_cpu_eval = lb.transform(y_test_encoded_cpu_eval)
+                    if y_test_encoded_onehot_cpu_eval.shape[1] == probability_scores_cpu_eval.shape[1]:
+                         auc_eval = roc_auc_score(y_test_encoded_onehot_cpu_eval, probability_scores_cpu_eval, average='macro', multi_class='ovr')
+                    elif probability_scores_cpu_eval.ndim == 1 and y_test_encoded_onehot_cpu_eval.shape[1] == 2 : # Should not happen with predict_proba for multi-class
+                         auc_eval = roc_auc_score(y_test_encoded_cpu_eval, probability_scores_cpu_eval) # Fallback, might be incorrect for multi-class
+                    else: print(f"AUC shape mismatch Warning for sklearn SVM predict_proba.")
+            elif hasattr(final_model_instance, "decision_function"): # Fallback for SVC or if LinearSVC was used
+                decision_scores_cpu_eval = final_model_instance.decision_function(X_test_final_tfidf_cpu_sparse_eval)
+                if len(np.unique(y_test_encoded_cpu_eval)) == 2:
+                    auc_eval = roc_auc_score(y_test_encoded_cpu_eval, decision_scores_cpu_eval)
+                else: # For multi-class, decision_function might need OvR strategy for AUC
+                    auc_eval = roc_auc_score(y_test_encoded_cpu_eval, decision_scores_cpu_eval, multi_class='ovr', average='macro')
+        except Exception as e:
+            print(f"Could not calculate ROC-AUC for sklearn SVM: {e}")
+            auc_eval = None
+
+        final_accuracy_eval = accuracy_score(y_test_encoded_cpu_eval, y_test_pred_cpu_eval) # sklearn.metrics
+        final_f1_weighted_eval = f1_score(y_test_encoded_cpu_eval, y_test_pred_cpu_eval, average='weighted')
+        cm_cpu_eval = confusion_matrix(y_test_encoded_cpu_eval, y_test_pred_cpu_eval) # sklearn.metrics
+        del X_test_final_tfidf_cpu_sparse_eval # Cleanup
+    else: # Original cuML path for Bayes and LR
+        y_test_pred_gpu_eval = final_model_instance.predict(X_test_final_tfidf_gpu_eval)
+        y_test_pred_cpu_eval = cupy.asnumpy(y_test_pred_gpu_eval)
+
+        try: # Original AUC calculation for cuML models
+            if hasattr(final_model_instance, "predict_proba"):
+                probability_scores_gpu = final_model_instance.predict_proba(X_test_final_tfidf_gpu_eval)
+                probability_scores_cpu_cuML = cupy.asnumpy(probability_scores_gpu)
+                if len(np.unique(y_test_encoded_cpu_eval)) == 2:
+                    auc_eval = roc_auc_score(y_test_encoded_cpu_eval, probability_scores_cpu_cuML[:, 1])
+                else:
+                    from sklearn.preprocessing import LabelBinarizer
+                    lb = LabelBinarizer().fit(y_test_encoded_cpu_eval)
+                    y_test_encoded_onehot_cpu_eval = lb.transform(y_test_encoded_cpu_eval)
+                    if y_test_encoded_onehot_cpu_eval.shape[1] == probability_scores_cpu_cuML.shape[1]:
+                        auc_eval = roc_auc_score(y_test_encoded_onehot_cpu_eval, probability_scores_cpu_cuML, average='macro', multi_class='ovr')
+                    elif probability_scores_cpu_cuML.ndim == 1 and y_test_encoded_onehot_cpu_eval.shape[1] == 2 :
+                         auc_eval = roc_auc_score(y_test_encoded_cpu_eval, probability_scores_cpu_cuML)
+                    else: print(f"AUC shape mismatch Warning for cuML predict_proba.")
+            elif hasattr(final_model_instance, "decision_function"):
+                decision_scores_gpu = final_model_instance.decision_function(X_test_final_tfidf_gpu_eval)
+                decision_scores_cpu_cuML = cupy.asnumpy(decision_scores_gpu)
+                if len(np.unique(y_test_encoded_cpu_eval)) == 2:
+                    auc_eval = roc_auc_score(y_test_encoded_cpu_eval, decision_scores_cpu_cuML)
+                else:
+                    auc_eval = roc_auc_score(y_test_encoded_cpu_eval, decision_scores_cpu_cuML, multi_class='ovr', average='macro')
+        except Exception as e:
+            print(f"Could not calculate ROC-AUC for cuML model: {e}")
+            auc_eval = None
+
+        final_accuracy_eval = cuml_accuracy_score(y_test_encoded_cpu_eval, y_test_pred_cpu_eval) # cuml.metrics
+        final_f1_weighted_eval = f1_score(y_test_encoded_cpu_eval, y_test_pred_cpu_eval, average='weighted')
+        cm_gpu_eval = cuml_confusion_matrix(y_test_encoded_cpu_eval, y_test_pred_cpu_eval) # cuml.metrics
+        cm_cpu_eval = cupy.asnumpy(cm_gpu_eval)
+        del y_test_pred_gpu_eval # Cleanup
+
     evaluation_time = time.time() - start_time_test
     print(f"Evaluation complete in {evaluation_time:.2f} seconds.")
 
-    y_test_pred_cpu = cupy.asnumpy(y_test_pred_gpu)
-
-    final_accuracy = cuml_accuracy_score(y_test_encoded_cpu, y_test_pred_cpu)
-    final_f1_weighted = f1_score(y_test_encoded_cpu, y_test_pred_cpu, average='weighted')
     print(f"\n--- Final Test Results ({model_type.upper()}) ---")
-    print(f"Accuracy: {final_accuracy:.4f}")
-    print(f"Weighted F1 Score: {final_f1_weighted:.4f}")
+    print(f"Accuracy: {final_accuracy_eval:.4f}")
+    print(f"Weighted F1 Score: {final_f1_weighted_eval:.4f}")
 
-    auc = None
-    try:
-        if hasattr(final_model, "predict_proba"):
-            probability_scores_gpu = final_model.predict_proba(X_test_final_tfidf)
-            probability_scores_cpu = cupy.asnumpy(probability_scores_gpu)
-            if len(np.unique(y_test_encoded_cpu)) == 2: auc = roc_auc_score(y_test_encoded_cpu, probability_scores_cpu[:, 1])
-            else:
-                from sklearn.preprocessing import LabelBinarizer
-                lb = LabelBinarizer().fit(y_test_encoded_cpu); y_test_encoded_onehot_cpu = lb.transform(y_test_encoded_cpu)
-                if y_test_encoded_onehot_cpu.shape[1] == probability_scores_cpu.shape[1]: auc = roc_auc_score(y_test_encoded_onehot_cpu, probability_scores_cpu, average='macro', multi_class='ovr')
-                elif probability_scores_cpu.ndim == 1 and y_test_encoded_onehot_cpu.shape[1] == 2 : auc = roc_auc_score(y_test_encoded_cpu, probability_scores_cpu)
-                else: print(f"AUC shape mismatch Warning.")
-        elif hasattr(final_model, "decision_function"):
-            decision_scores_gpu = final_model.decision_function(X_test_final_tfidf)
-            decision_scores_cpu = cupy.asnumpy(decision_scores_gpu)
-            if len(np.unique(y_test_encoded_cpu)) == 2: auc = roc_auc_score(y_test_encoded_cpu, decision_scores_cpu)
-            else: auc = roc_auc_score(y_test_encoded_cpu, decision_scores_cpu, multi_class='ovr', average='macro')
-    except Exception as e: print(f"Could not calculate ROC-AUC: {e}"); auc = None
-
-    print("Calculating Confusion Matrix...")
-    cm_gpu = cuml_confusion_matrix(y_test_encoded_cpu, y_test_pred_cpu)
-    cm_cpu = cupy.asnumpy(cm_gpu) # Only convert to CPU if needed for printing/sklearn.classification_report
-    cm_list = cm_cpu.tolist()
+    cm_list_eval = cm_cpu_eval.tolist() if cm_cpu_eval is not None else []
 
     try:
-        reverse_party_map = {v: k for k, v in party_map.items()}
-        unique_labels_in_test_cpu = sorted(list(np.unique(y_test_encoded_cpu)))
-        target_names = [reverse_party_map.get(i, str(i)) for i in unique_labels_in_test_cpu]
+        reverse_party_map_eval = {v: k for k, v in party_map.items()}
+        unique_labels_in_test_cpu_eval = sorted(list(np.unique(y_test_encoded_cpu_eval)))
+        target_names_eval = [reverse_party_map_eval.get(i, str(i)) for i in unique_labels_in_test_cpu_eval]
     except Exception as e:
         print(f"Could not get target names: {e}")
-        target_names = [str(i) for i in sorted(list(np.unique(y_test_encoded_cpu)))]
+        target_names_eval = [str(i) for i in sorted(list(np.unique(y_test_encoded_cpu_eval)))]
 
-    if auc is not None: print(f"ROC-AUC          : {auc:.4f}")
-    print("Confusion Matrix:\n", cm_cpu)
+    if auc_eval is not None: print(f"ROC-AUC          : {auc_eval:.4f}")
+    if cm_cpu_eval is not None: print("Confusion Matrix:\n", cm_cpu_eval)
     try:
-        print("\nClassification Report:")
-        print(classification_report(y_test_encoded_cpu, y_test_pred_cpu, target_names=target_names, zero_division=0))
+        if y_test_pred_cpu_eval is not None: # Ensure predictions exist
+             print("\nClassification Report:")
+             print(classification_report(y_test_encoded_cpu_eval, y_test_pred_cpu_eval, target_names=target_names_eval, zero_division=0))
     except Exception as e:
         print(f"Could not print Classification Report: {e}")
 
     print("-" * 25)
     current_detailed_log_path = detailed_log_paths[model_type]
     with open(current_detailed_log_path, "a") as f:
-        f.write(f"{random_state},{congress_year},{final_accuracy:.4f},{final_f1_weighted:.4f},{auc if auc is not None else 'NA'}\n")
+        f.write(f"{random_state},{congress_year},{final_accuracy_eval:.4f},{final_f1_weighted_eval:.4f},{auc_eval if auc_eval is not None else 'NA'}\n")
 
     result_json = {
-        "seed": random_state, "year": congress_year, "accuracy": round(final_accuracy, 4),
-        "f1_score": round(final_f1_weighted, 4), "auc": round(auc, 4) if auc is not None else "NA",
-        "confusion_matrix": cm_list, "labels": target_names, # Added back
+        "seed": random_state, "year": congress_year, "accuracy": round(final_accuracy_eval, 4),
+        "f1_score": round(final_f1_weighted_eval, 4), "auc": round(auc_eval, 4) if auc_eval is not None else "NA",
+        "confusion_matrix": cm_list_eval, "labels": target_names_eval,
         "best_params": best_params,
         "timing": {
             "tuning_sec": round(tuning_time, 2), "final_train_sec": round(final_train_time, 2),
             "evaluation_sec": round(evaluation_time, 2), "total_pipeline_sec": round(time.time() - start_time_total, 2)
         }
     }
-    # Save JSON for this run (optional, good for detailed tracking)
-    # json_log_dir = Path("logs/json_results") / model_type / year_str
-    # json_log_dir.mkdir(parents=True, exist_ok=True)
-    # json_log_path = json_log_dir / f"results_seed{random_state}.json"
-    # with open(json_log_path, "w") as jf:
-    #    json.dump(result_json, jf, indent=4)
-    # print(f"Saved detailed JSON results to {json_log_path}")
 
-    # Plot confusion matrix for this specific run
-    # plot_confusion_matrix(cm_cpu, target_names, model_plot_output_dir,
-    #                       filename_prefix=f"{model_type}_{congress_year}_seed{random_state}_cm")
-
-
-    del X_train_val_final_cudf, y_train_val_final_cupy, X_train_val_final_tfidf
-    del X_test_cudf, X_test_final_tfidf, y_test_pred_gpu
-    del final_tfidf, final_model
+    # Cleanup remaining major variables from this pipeline run
+    del X_train_val_final_cudf, y_train_val_final_cupy, X_train_val_final_tfidf_gpu
+    del X_test_cudf_eval, X_test_final_tfidf_gpu_eval
+    del final_tfidf_vectorizer, final_model_instance
+    if y_test_pred_cpu_eval is not None: del y_test_pred_cpu_eval
+    if probability_scores_cpu_eval is not None: del probability_scores_cpu_eval
+    if decision_scores_cpu_eval is not None: del decision_scores_cpu_eval
     cupy.get_default_memory_pool().free_all_blocks()
 
     return result_json
 
 
-
-
 # ------ Main Execution -------
 if __name__ == "__main__":
     congress_years_to_process = [f"{i:03}" for i in range(CONGRESS_YEAR_START, CONGRESS_YEAR_END + 1)]
-    models_to_run = ['bayes', 'svm', 'lr']
+    models_to_run = ['bayes', 'lr', 'svm'] # Ensure 'svm' is in the list to test
 
     for seed in SEEDS:
         print(f"\n--- Starting runs for seed: {seed} ---")
@@ -373,7 +447,6 @@ if __name__ == "__main__":
                 continue
             try:
                 print("Loading data...")
-                # ASSUMPTION: 'speech' column in this CSV is ALREADY CLEANED
                 df_full = pd.read_csv(input_csv_path)
                 print(f"Data loaded. Shape: {df_full.shape}")
 
@@ -384,8 +457,7 @@ if __name__ == "__main__":
                 if df_full.empty:
                     print(f"⚠️  Skipping Congress {year_str} (seed {seed}): Data empty after NaNs drop.")
                     continue
-                
-                # --- Leave-out-speaker split ---
+
                 print("Performing leave-out speaker split...")
                 start_time_split = time.time()
                 unique_speakers = df_full['speakerid'].unique()
@@ -393,19 +465,19 @@ if __name__ == "__main__":
                 if len(unique_speakers) < 2:
                     print(f"⚠️  Skipping Congress {year_str} (seed {seed}): Not enough unique speakers ({len(unique_speakers)}).")
                     continue
-                
+
                 current_test_size = TEST_SIZE if len(unique_speakers) * TEST_SIZE >= 1 else 1/len(unique_speakers)
                 train_val_speakers, test_speakers = train_test_split(
                     unique_speakers, test_size=current_test_size, random_state=seed)
 
                 if len(train_val_speakers) < 2 :
                     train_speakers = train_val_speakers
-                    val_speakers = np.array([])
+                    val_speakers = np.array([]) # Ensure it's an empty array for consistency
                 else:
                     current_validation_size = VALIDATION_SIZE if len(train_val_speakers) * VALIDATION_SIZE >= 1 else 1/len(train_val_speakers)
                     train_speakers, val_speakers = train_test_split(
                         train_val_speakers, test_size=current_validation_size, random_state=seed)
-                
+
                 train_df = df_full[df_full["speakerid"].isin(train_speakers)].reset_index(drop=True)
                 val_df = df_full[df_full["speakerid"].isin(val_speakers)].reset_index(drop=True) if len(val_speakers) > 0 else pd.DataFrame(columns=df_full.columns)
                 test_df = df_full[df_full["speakerid"].isin(test_speakers)].reset_index(drop=True)
@@ -424,8 +496,7 @@ if __name__ == "__main__":
                 y_val_pd_orig = val_df["party"] if not val_df.empty else pd.Series(dtype='object')
                 X_test_pd_cleaned_orig = test_df["speech"]
                 y_test_pd_orig = test_df["party"]
-                
-                # --- Encoding ---
+
                 print("Encoding labels and aligning X data (already cleaned) with filtered labels...")
                 start_time_encode = time.time()
 
@@ -442,12 +513,12 @@ if __name__ == "__main__":
                 else:
                     X_val_pd_cleaned_aligned = pd.Series(dtype='object')
                     y_val_encoded_pd_aligned = pd.Series(dtype='int')
-                
+
                 test_data_to_encode = pd.DataFrame({'party': y_test_pd_orig, 'speech': X_test_pd_cleaned_orig})
                 test_encoded_df = encode_labels_with_map(test_data_to_encode, PARTY_MAP)
                 X_test_pd_cleaned_aligned = test_encoded_df['speech'].reset_index(drop=True) if not test_encoded_df.empty else pd.Series(dtype='object')
                 y_test_encoded_pd_aligned = test_encoded_df['label'].reset_index(drop=True) if not test_encoded_df.empty else pd.Series(dtype='int')
-                
+
                 encode_time = time.time() - start_time_encode
                 print(f"Labels encoded and X data aligned in {encode_time:.2f} seconds.")
                 print(f"  Post-encoding/alignment - Train: {len(X_train_pd_cleaned_aligned)}, Val: {len(X_val_pd_cleaned_aligned)}, Test: {len(X_test_pd_cleaned_aligned)}")
@@ -458,18 +529,16 @@ if __name__ == "__main__":
                 if len(np.unique(y_train_encoded_pd_aligned)) < 2 :
                     print(f"⚠️  Skipping Congress {year_str} (seed {seed}): Fewer than 2 unique classes in training labels after encoding. Model fitting requires at least 2.")
                     continue
-                
-                #--- Loop for GridSearch ---
+
                 for model_type_to_run in models_to_run:
                     current_model_config = model_configs.get(model_type_to_run)
                     if current_model_config is None:
                         print(f"Warning: Config for model '{model_type_to_run}' not found. Skipping.")
                         continue
-                    
+
                     current_model_plot_dir = model_plotting_info[model_type_to_run]["output_dir"]
                     Path(current_model_plot_dir).mkdir(parents=True, exist_ok=True)
 
-                    # --- Actual Processing --- 
                     run_model_pipeline(
                         X_train_pd_cleaned_aligned, y_train_encoded_pd_aligned,
                         X_val_pd_cleaned_aligned, y_val_encoded_pd_aligned,
@@ -485,6 +554,14 @@ if __name__ == "__main__":
                 print(f"❌ An error occurred during processing for Congress {year_str} with seed {seed}: {e}")
                 import traceback
                 traceback.print_exc()
+            finally:
+                # General cleanup at the end of processing a year, if any dataframes are large and still in scope
+                if 'df_full' in locals(): del df_full
+                if 'train_df' in locals(): del train_df
+                if 'val_df' in locals(): del val_df
+                if 'test_df' in locals(): del test_df
+                cupy.get_default_memory_pool().free_all_blocks()
+
 
     print("\n--- Calculating and plotting averaged results ---")
     for model_type_to_plot in models_to_run:
@@ -502,7 +579,7 @@ if __name__ == "__main__":
             if not Path(detailed_log_for_avg).exists() or Path(detailed_log_for_avg).stat().st_size == 0:
                 print(f"Error: Detailed log empty/not found for {model_type_to_plot.upper()} at {detailed_log_for_avg}.")
                 continue
-            
+
             df_detailed_metrics = pd.read_csv(detailed_log_for_avg)
             if df_detailed_metrics.empty or 'year' not in df_detailed_metrics.columns:
                 print(f"Error: Detailed log for {model_type_to_plot.upper()} empty/malformed after reading.")
@@ -510,7 +587,7 @@ if __name__ == "__main__":
 
             df_detailed_metrics['auc'] = pd.to_numeric(df_detailed_metrics['auc'], errors='coerce')
             df_avg_metrics = df_detailed_metrics.groupby('year')[['accuracy', 'f1_score', 'auc']].mean(numeric_only=True).reset_index()
-            
+
             if df_avg_metrics.empty:
                 print(f"Warning: No data to average for {model_type_to_plot.upper()}. Skipping plotting.")
                 continue
@@ -519,10 +596,10 @@ if __name__ == "__main__":
                 columns={'accuracy':'accuracy_std', 'f1_score':'f1_score_std', 'auc':'auc_std'})
             df_avg_metrics = df_avg_metrics.merge(df_std_metrics, on='year', how='left')
 
-            try: 
+            try:
                 df_avg_metrics['year_int'] = df_avg_metrics['year'].astype(int)
                 df_avg_metrics = df_avg_metrics.sort_values('year_int').drop('year_int', axis=1)
-            except ValueError: 
+            except ValueError:
                 print(f"Warning: 'year' column for {model_type_to_plot.upper()} not purely numeric. Sorting as string.")
                 df_avg_metrics = df_avg_metrics.sort_values('year')
 

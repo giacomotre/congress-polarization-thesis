@@ -10,7 +10,7 @@ common:
 
   data_params:
     congress_year_start: 76 # Start year (inclusive)
-    congress_year_end: 82  # End year (exclusive)
+    congress_year_end: 77  # End year (exclusive)
 
   party_map:
     D: 0 # Democrat
@@ -37,13 +37,14 @@ svm:
   # TF-IDF Parameters specific to SVM (default for instantiation)
   tfidf_max_features: 10000
   ngram_range: [1, 2]
+  
 
   # Hyperparameter Grids for Tuning TF-IDF (for SVM pipeline)
   tfidf_max_features_grid: [5000, 10000, 20000]
   ngram_range_grid: [[1, 1], [1, 2]]
 
   # Linear SVC specific parameters grid for tuning (example)
-  # svm_C_grid: [0.1, 1.0, 10.0] # Uncomment and add to param_grid in run_model_pipeline if tuning C
+  C_grid: [0.1, 1, 10, 100] # Uncomment and add to param_grid in run_model_pipeline if tuning C
 
 logistic_regression:
   # TF-IDF Parameters specific to Logistic Regression (default for instantiation)
