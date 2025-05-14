@@ -21,7 +21,6 @@ from cuml.svm import LinearSVC
 from cuml.linear_model import LogisticRegression
 from cuml.metrics import accuracy_score as cuml_accuracy_score
 from cuml.metrics import confusion_matrix as cuml_confusion_matrix
-from cuml.metrics.roc_auc import roc_auc_score as cuml_roc_auc_score
 
 # Import utility functions
 from config_loader import load_config
