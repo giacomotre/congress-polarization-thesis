@@ -10,7 +10,7 @@ common:
 
   data_params:
     congress_year_start: 76 # Start year (inclusive)
-    congress_year_end: 82  # End year (exclusive)
+    congress_year_end: 78  # End year (exclusive)
 
   party_map:
     D: 0 # Democrat
@@ -27,7 +27,7 @@ bayes:
   ngram_range: [1, 2]
 
   # Hyperparameter Grids for Tuning TF-IDF (for Bayes pipeline)
-  tfidf_max_features_grid: [5000, 10000, 20000]
+  tfidf_max_features_grid: [5000, 10000, 15000]
   ngram_range_grid: [[1, 1], [1, 2]]
 
   # Complement Naive Bayes specific parameters grid for tuning (example)
@@ -39,7 +39,7 @@ svm:
   ngram_range: [1, 2]
 
   # Hyperparameter Grids for Tuning TF-IDF (for SVM pipeline)
-  tfidf_max_features_grid: [5000, 10000, 20000]
+  tfidf_max_features_grid: [5000, 10000, 15000]
   ngram_range_grid: [[1, 1], [1, 2]]
 
   # Linear SVC specific parameters grid for tuning (example)
@@ -51,7 +51,7 @@ logistic_regression:
   ngram_range: [1, 2]
 
   # Hyperparameter Grids for Tuning TF-IDF (for Logistic Regression pipeline)
-  tfidf_max_features_grid: [5000, 10000, 20000]
+  tfidf_max_features_grid: [5000, 10000, 15000]
   ngram_range_grid: [[1, 1], [1, 2]]
 
   # Logistic Regression specific parameters grid for tuning (L2 penalty)

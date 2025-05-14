@@ -173,6 +173,18 @@ def run_model_pipeline(
                 # Fit TF-IDF and transform
                 X_train_tfidf = tfidf_vectorizer.fit_transform(X_train_fold_cudf)
                 X_val_tfidf = tfidf_vectorizer.transform(X_val_fold_cudf)
+                
+                # --- BEGIN DEBUG PRINT FOR SVM CV ---
+                if model_type == 'svm':
+                    print(f"    DEBUG SVM (CV Fold {fold_num}):")
+                    print(f"        X_train_tfidf type: {type(X_train_tfidf)}")
+                    if hasattr(X_train_tfidf, 'dtype'):
+                        print(f"        X_train_tfidf dtype: {X_train_tfidf.dtype}")
+                    if hasattr(X_train_tfidf, 'shape'):
+                        print(f"        X_train_tfidf shape: {X_train_tfidf.shape}")
+                    # You can also print a small part of the data if it's not too large
+                    # print(f"        X_train_tfidf data (first 5x5 if dense): {X_train_tfidf[:5,:5].toarray() if hasattr(X_train_tfidf, 'toarray') else 'Cannot display sparse'}")
+                # --- END DEBUG PRINT FOR SVM CV ---
 
                 # Fit Model
                 model.fit(X_train_tfidf, y_train_fold_cupy)
@@ -233,6 +245,15 @@ def run_model_pipeline(
         raise ValueError(f"Unknown model type: {model_type}")
 
     X_train_val_final_tfidf = final_tfidf.fit_transform(X_train_val_final_cudf)
+    # --- BEGIN DEBUG PRINT FOR SVM FINAL FIT ---
+    if model_type == 'svm':
+        print(f"    DEBUG SVM (Final Fit):")
+        print(f"        X_train_val_final_tfidf type: {type(X_train_val_final_tfidf)}")
+        if hasattr(X_train_val_final_tfidf, 'dtype'):
+            print(f"        X_train_val_final_tfidf dtype: {X_train_val_final_tfidf.dtype}")
+        if hasattr(X_train_val_final_tfidf, 'shape'):
+            print(f"        X_train_val_final_tfidf shape: {X_train_val_final_tfidf.shape}")
+    # --- END DEBUG PRINT FOR SVM FINAL FIT ---
     final_model.fit(X_train_val_final_tfidf, y_train_val_final_cupy)
 
     final_train_time = time.time() - start_time_final_train
