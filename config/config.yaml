@@ -6,11 +6,11 @@ common:
     test_size: 0.15       # Proportion of data for test set (leave-out speakers)
     validation_size: 0.25 # Proportion of remaining data for validation
     random_state: 42      # Default random state
-    seeds: [42] #[42, 123, 789] List of random states to run with
+    seeds: [42, 123, 789] #List of random states to run with
 
   data_params:
     congress_year_start: 76 # Start year (inclusive)
-    congress_year_end: 91  # End year (exclusive)
+    congress_year_end: 87  # End year (exclusive)
 
   party_map:
     D: 0 # Democrat
