@@ -366,7 +366,7 @@ if __name__ == "__main__":
         print(f"\n--- Starting runs for seed: {seed} ---")
         for year_str in congress_years_to_process:
             print(f"\nProcessing Congress Year: {year_str}")
-            input_csv_path = Path(f"data/merged/house_db/house_cleaned_{year_str}.csv")
+            input_csv_path = Path(f"data/processed/house_db/house_cleaned_{year_str}.csv")
 
             if not input_csv_path.exists():
                 print(f"⚠️  Skipping Congress {year_str} (seed {seed}): CSV file not found at {input_csv_path}.")
