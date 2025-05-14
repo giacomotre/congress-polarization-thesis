@@ -202,6 +202,16 @@ def run_model_pipeline(
                     X_train_tfidf_to_fit = X_train_tfidf
                 # END DEBUG 
                 
+                # DEBUG Y
+                if model_type == 'svm':
+                    print(f"        DEBUG SVM y_train_fold_cupy type: {type(y_train_fold_cupy)}")
+                    print(f"        DEBUG SVM y_train_fold_cupy dtype: {y_train_fold_cupy.dtype}")
+                    print(f"        DEBUG SVM y_train_fold_cupy shape: {y_train_fold_cupy.shape}")
+                    print(f"        DEBUG SVM y_train_fold_cupy ndim: {y_train_fold_cupy.ndim}")
+                    if y_train_fold_cupy.size > 0:
+                        print(f"        DEBUG SVM y_train_fold_cupy[:5]: {y_train_fold_cupy[:min(5, y_train_fold_cupy.size)]}") # Print a sample   
+                # END Y DEBUG
+                
                 model.fit(X_train_tfidf_to_fit, y_train_fold_cupy) # Error happens here for SVM
                 # Fit Model
                 model.fit(X_train_tfidf, y_train_fold_cupy)
@@ -262,35 +272,49 @@ def run_model_pipeline(
         raise ValueError(f"Unknown model type: {model_type}")
 
     X_train_val_final_tfidf = final_tfidf.fit_transform(X_train_val_final_cudf)
-    # --- BEGIN DEBUG PRINT FOR SVM FINAL FIT ---
-    if model_type == 'svm':
-        print(f"    DEBUG SVM (Final Fit):")
-        print(f"        X_train_val_final_tfidf type: {type(X_train_val_final_tfidf)}")
-        if hasattr(X_train_val_final_tfidf, 'dtype'):
-            print(f"        X_train_val_final_tfidf dtype: {X_train_val_final_tfidf.dtype}")
-        if hasattr(X_train_val_final_tfidf, 'shape'):
-            print(f"        X_train_val_final_tfidf shape: {X_train_val_final_tfidf.shape}")
-    # --- END DEBUG PRINT FOR SVM FINAL FIT ---
     
-    #START DEBUG
+    # --- BEGIN DEBUG PRINT FOR SVM FINAL FIT ---
+    X_test_for_predict = X_test_final_tfidf # Assuming X_test_final_tfidf is defined before this block from final_tfidf.transform(X_test_cudf)
 
-    # Prepare X for fitting
     if model_type == 'svm':
-        print("    Attempting to fit FINAL SVM with DENSE X_train_val_final_tfidf...")
-        try:
-            X_train_val_final_tfidf_to_fit = X_train_val_final_tfidf.todense()
-            print(f"        Converted X_train_val_final_tfidf to dense. Shape: {X_train_val_final_tfidf_to_fit.shape}, Dtype: {X_train_val_final_tfidf_to_fit.dtype}")
-        except Exception as e:
-            print(f"        Error converting X_train_val_final_tfidf to dense: {e}")
-            X_train_val_final_tfidf_to_fit = X_train_val_final_tfidf # Fallback
-    else:
-        X_train_val_final_tfidf_to_fit = X_train_val_final_tfidf
+        print(f"    DEBUG FINAL FIT SVM:")
+        # Debug Y
+        print(f"        y_train_val_final_cupy type: {type(y_train_val_final_cupy)}")
+        print(f"        y_train_val_final_cupy dtype: {y_train_val_final_cupy.dtype}")
+        print(f"        y_train_val_final_cupy shape: {y_train_val_final_cupy.shape}")
+        print(f"        y_train_val_final_cupy ndim: {y_train_val_final_cupy.ndim}")
+        if y_train_val_final_cupy.size > 0:
+            print(f"        y_train_val_final_cupy[:5]: {y_train_val_final_cupy[:min(5, y_train_val_final_cupy.size)]}")
 
-    final_model.fit(X_train_val_final_tfidf_to_fit, y_train_val_final_cupy)
+        # Original X (sparse) info
+        print(f"        Original X_train_val_final_tfidf type: {type(X_train_val_final_tfidf)}")
+        # ... (other X prints: dtype, shape) ...
+        
+        print(f"    Attempting to fit FINAL SVM with DENSE X_train_val_final_tfidf...")
+        try:
+            X_final_to_fit = X_train_val_final_tfidf.todense()
+            print(f"        Converted X_train_val_final_tfidf to dense for fitting. Shape: {X_final_to_fit.shape}, Dtype: {X_final_to_fit.dtype}")
+
+            print(f"        Attempting to convert X_test_final_tfidf to dense for SVM PREDICTION...")
+            try:
+                X_test_for_predict = X_test_final_tfidf.todense() # Make sure X_test_final_tfidf is defined from your final_tfidf
+                print(f"        Converted X_test_final_tfidf to dense for SVM prediction. Shape: {X_test_for_predict.shape}, Dtype: {X_test_for_predict.dtype}")
+            except Exception as e_test_dense:
+                print(f"        Error converting X_test_final_tfidf to dense for SVM prediction: {e_test_dense}")
+                X_test_for_predict = X_test_final_tfidf
+
+        except Exception as e_final_train_dense:
+            print(f"        Error converting X_train_val_final_tfidf to dense for fitting: {e_final_train_dense}")
+            X_final_to_fit = X_train_val_final_tfidf 
+            X_test_for_predict = X_test_final_tfidf
+
+    final_model.fit(X_final_to_fit, y_train_val_final_cupy)
+
+    #final_model.fit(X_train_val_final_tfidf_to_fit, y_train_val_final_cupy) 1st debug version
     
     #END DEBUG
     
-    #final_model.fit(X_train_val_final_tfidf, y_train_val_final_cupy)
+    #final_model.fit(X_train_val_final_tfidf, y_train_val_final_cupy) the original one
 
     final_train_time = time.time() - start_time_final_train
     print(f"Final model training complete in {final_train_time:.2f} seconds.")
@@ -417,7 +441,7 @@ def run_model_pipeline(
 # ------ Main Execution -------
 if __name__ == "__main__":
     congress_years_to_process = [f"{i:03}" for i in range(CONGRESS_YEAR_START, CONGRESS_YEAR_END + 1)]
-    models_to_run = ['bayes', 'lr', 'svm']
+    models_to_run = ['svm'] #'bayes', 'lr',
 
     for seed in SEEDS:
         print(f"\n--- Starting runs for seed: {seed} ---")
