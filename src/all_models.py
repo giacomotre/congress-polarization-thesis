@@ -186,6 +186,23 @@ def run_model_pipeline(
                     # print(f"        X_train_tfidf data (first 5x5 if dense): {X_train_tfidf[:5,:5].toarray() if hasattr(X_train_tfidf, 'toarray') else 'Cannot display sparse'}")
                 # --- END DEBUG PRINT FOR SVM CV ---
 
+                
+                # ... (after X_val_tfidf is created and after your SVM debug prints for X)
+
+                # START DEBUG
+                if model_type == 'svm':
+                    print("        Attempting to fit SVM with DENSE X_train_tfidf...")
+                    try:
+                        X_train_tfidf_to_fit = X_train_tfidf.todense()
+                        print(f"        Converted X_train_tfidf to dense. Shape: {X_train_tfidf_to_fit.shape}, Dtype: {X_train_tfidf_to_fit.dtype}")
+                    except Exception as e:
+                        print(f"        Error converting X_train_tfidf to dense: {e}")
+                        X_train_tfidf_to_fit = X_train_tfidf # Fallback to sparse if dense fails
+                else:
+                    X_train_tfidf_to_fit = X_train_tfidf
+                # END DEBUG 
+                
+                model.fit(X_train_tfidf_to_fit, y_train_fold_cupy) # Error happens here for SVM
                 # Fit Model
                 model.fit(X_train_tfidf, y_train_fold_cupy)
 
@@ -254,7 +271,26 @@ def run_model_pipeline(
         if hasattr(X_train_val_final_tfidf, 'shape'):
             print(f"        X_train_val_final_tfidf shape: {X_train_val_final_tfidf.shape}")
     # --- END DEBUG PRINT FOR SVM FINAL FIT ---
-    final_model.fit(X_train_val_final_tfidf, y_train_val_final_cupy)
+    
+    #START DEBUG
+
+    # Prepare X for fitting
+    if model_type == 'svm':
+        print("    Attempting to fit FINAL SVM with DENSE X_train_val_final_tfidf...")
+        try:
+            X_train_val_final_tfidf_to_fit = X_train_val_final_tfidf.todense()
+            print(f"        Converted X_train_val_final_tfidf to dense. Shape: {X_train_val_final_tfidf_to_fit.shape}, Dtype: {X_train_val_final_tfidf_to_fit.dtype}")
+        except Exception as e:
+            print(f"        Error converting X_train_val_final_tfidf to dense: {e}")
+            X_train_val_final_tfidf_to_fit = X_train_val_final_tfidf # Fallback
+    else:
+        X_train_val_final_tfidf_to_fit = X_train_val_final_tfidf
+
+    final_model.fit(X_train_val_final_tfidf_to_fit, y_train_val_final_cupy)
+    
+    #END DEBUG
+    
+    #final_model.fit(X_train_val_final_tfidf, y_train_val_final_cupy)
 
     final_train_time = time.time() - start_time_final_train
     print(f"Final model training complete in {final_train_time:.2f} seconds.")
@@ -381,7 +417,7 @@ def run_model_pipeline(
 # ------ Main Execution -------
 if __name__ == "__main__":
     congress_years_to_process = [f"{i:03}" for i in range(CONGRESS_YEAR_START, CONGRESS_YEAR_END + 1)]
-    models_to_run = ['bayes', 'svm', 'lr']
+    models_to_run = ['bayes', 'lr', 'svm']
 
     for seed in SEEDS:
         print(f"\n--- Starting runs for seed: {seed} ---")
