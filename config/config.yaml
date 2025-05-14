@@ -10,7 +10,7 @@ common:
 
   data_params:
     congress_year_start: 76 # Start year (inclusive)
-    congress_year_end: 77  # End year (exclusive)
+    congress_year_end: 91  # End year (exclusive)
 
   party_map:
     D: 0 # Democrat
@@ -44,7 +44,7 @@ svm:
   ngram_range_grid: [[1, 1], [1, 2]]
 
   # Linear SVC specific parameters grid for tuning (example)
-  C_grid: [0.1, 1, 10, 100] # Uncomment and add to param_grid in run_model_pipeline if tuning C
+  C_grid: [0.1, 1, 10] # Uncomment and add to param_grid in run_model_pipeline if tuning C
 
 logistic_regression:
   # TF-IDF Parameters specific to Logistic Regression (default for instantiation)
