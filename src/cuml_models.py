@@ -87,7 +87,7 @@ for model_type, log_path in detailed_log_paths.items():
         os.remove(log_path)
         print(f"Deleted existing detailed log file: {log_path}")
     with open(log_path, "w") as f:
-        f.write(detailed_csv_header_columns)
+        f.write(detailed_csv_header)
 
 #timing csv header
 timing_csv_header_columns = [
