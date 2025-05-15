@@ -19,7 +19,7 @@ from cuml.naive_bayes import ComplementNB
 from cuml.linear_model import LogisticRegression
 from cuml.metrics import accuracy_score as cuml_accuracy_score
 from cuml.metrics import confusion_matrix as cuml_confusion_matrix
-from cuml.metrics import f1_score as cuml_f1_score # Add this
+from sklearn.metrics import f1_score as sklearn_f1_score
 from cuml.metrics import roc_auc_score as cuml_roc_auc_score # Add this
 
 # Import utility functions
@@ -300,7 +300,7 @@ def run_model_pipeline(
 
     # Initialize metrics
     final_accuracy_eval = 0.0
-    final_f1_weighted_eval = 0.0
+    #final_f1_weighted_eval = 0.0 now calculate not available
     auc_eval = None
     cm_cpu_eval = None # Initialize cm_cpu_eval
     probability_scores_gpu = None # Initialize for cleanup
@@ -315,10 +315,18 @@ def run_model_pipeline(
         final_accuracy_gpu = cuml_accuracy_score(y_test_encoded_gpu_eval, y_test_pred_gpu_eval)
         final_accuracy_eval = cupy.asnumpy(final_accuracy_gpu).item() if final_accuracy_gpu is not None else 0.0
 
-        # F1 Score (Weighted)
-        # Assuming cuml_f1_score supports 'average' parameter. This might vary by cuML version.
-        final_f1_weighted_gpu = cuml_f1_score(y_test_encoded_gpu_eval, y_test_pred_gpu_eval, average='weighted')
-        final_f1_weighted_eval = cupy.asnumpy(final_f1_weighted_gpu).item() if final_f1_weighted_gpu is not None else 0.0
+        # F1 Score (Weighted) using scikit-learn
+        # Transfer necessary data from GPU (CuPy arrays) to CPU (NumPy arrays)
+        y_test_encoded_cpu = cupy.asnumpy(y_test_encoded_gpu_eval)
+        y_test_pred_cpu = cupy.asnumpy(y_test_pred_gpu_eval)
+        
+        # Use sklearn's f1_score
+        # Consider the zero_division parameter:
+        # 'warn' (default): acts like 0, issues a warning.
+        # 0: returns 0.0 for F-score if precision and recall are both zero for a class.
+        # 1: returns 1.0 for F-score if precision and recall are both zero for a class.
+        final_f1_weighted_eval = sklearn_f1_score(y_test_encoded_cpu, y_test_pred_cpu, average='weighted', zero_division=0)
+
         
         # Confusion Matrix
         cm_gpu_eval_calc = cuml_confusion_matrix(y_test_encoded_gpu_eval, y_test_pred_gpu_eval, convert_dtype=True)
@@ -340,7 +348,7 @@ def run_model_pipeline(
             auc_eval = None
             
     except Exception as e:
-        print(f"Error during cuML metrics calculation: {e}")
+        print(f"Error during cuML and scikit metrics calculation: {e}")
         # Ensure metrics are default if error occurs mid-calculation
         final_accuracy_eval = 0.0
         final_f1_weighted_eval = 0.0
