@@ -406,11 +406,11 @@ def run_model_pipeline(
     current_detailed_log_path = detailed_log_paths[model_type]
     with open(current_detailed_log_path, "a") as f:
         f.write(
-            f"{result_json['seed']},"
+            f"{result_json['seed']},"       # Assuming seed and year are not problematic
             f"{result_json['year']},"
-            f"{result_json["accuracy"]},"
-            f"{result_json["f1_score"]},"
-            f"{result_json["auc"]},\n"
+            f"{result_json['accuracy']},"
+            f"{result_json['f1_score']},"
+            f"{result_json['auc']}\n" 
         )
 
     # Cleanup remaining major variables from this pipeline run
