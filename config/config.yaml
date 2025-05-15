@@ -3,57 +3,52 @@
 # --- Common Parameters ---
 common:
   split_params:
-    test_size: 0.15       # Proportion of data for test set (leave-out speakers)
-    validation_size: 0.25 # Proportion of remaining data for validation
-    random_state: 42      # Default random state
-    seeds: [42, 123, 789] #List of random states to run with
+    test_size: 0.15
+    validation_size: 0.25
+    random_state: 42
+    seeds: [42, 123, 789]
 
   data_params:
-    congress_year_start: 76 # Start year (inclusive)
-    congress_year_end: 87  # End year (exclusive)
+    congress_year_start: 76
+    congress_year_end: 87
 
   party_map:
     D: 0 # Democrat
     R: 1 # Republican
-    # Add other parties if necessary; they will be excluded if not in this map
-    # I: 2 # Example for Independent
 
+# --- Common TF-IDF Default Settings and Tuning Grids ---
+# Define an anchor '&common_tfidf_config' for these settings
+common_tfidf_config: &common_tfidf_config
+  # Default values (if you use them for direct instantiation outside the grid search)
+  tfidf_max_features: 10000
+  ngram_range: [1, 2]
+  tfidf_min_df: 1 # Default for instantiation
+
+  # Hyperparameter Grids for Tuning TF-IDF
+  tfidf_max_features_grid: [5000, 10000, 15000]
+  ngram_range_grid: [[1, 1], [1, 2]]
+  #tfidf_min_df_grid: [2, 5, 0.001] # Example: min count 2, 5, or 0.1% of documents
 
 # --- Model Specific Parameters and Tuning Grids ---
 
 bayes:
-  # TF-IDF Parameters specific to Bayes (default for instantiation)
-  tfidf_max_features: 10000
-  ngram_range: [1, 2]
-
-  # Hyperparameter Grids for Tuning TF-IDF (for Bayes pipeline)
-  tfidf_max_features_grid: [5000, 10000, 15000]
-  ngram_range_grid: [[1, 1], [1, 2]]
-
-  # Complement Naive Bayes specific parameters grid for tuning (example)
-  # bayes_alpha_grid: [0.1, 0.5, 1.0] # Uncomment and add to param_grid in run_model_pipeline if tuning alpha
+  <<: *common_tfidf_config # Merges all keys from common_tfidf_config here
+  # Bayes-specific parameters can be added or overridden here
+  bayes_alpha_grid: [0.1, 0.5, 1.0]
+  # Example of overriding a common TF-IDF grid just for Bayes, if needed:
+  # tfidf_ngram_range_grid: [[1, 1]] # This would override the common one
 
 svm:
-  # TF-IDF Parameters specific to SVM (default for instantiation)
-  tfidf_max_features: 10000
-  ngram_range: [1, 2]
-  
-
-  # Hyperparameter Grids for Tuning TF-IDF (for SVM pipeline)
-  tfidf_max_features_grid: [5000, 10000, 15000]
-  ngram_range_grid: [[1, 1], [1, 2]]
-
-  # Linear SVC specific parameters grid for tuning (example)
-  C_grid: [0.1, 1, 10] # Uncomment and add to param_grid in run_model_pipeline if tuning C
+  <<: *common_tfidf_config # Merges all keys from common_tfidf_config here
+  # SVM-specific parameters
+  # If SVM needs different TF-IDF instantiation defaults (not grids):
+  # tfidf_max_features: 12000 # This would override the common default
+  C_grid: [0.1, 1, 10]
 
 logistic_regression:
-  # TF-IDF Parameters specific to Logistic Regression (default for instantiation)
-  tfidf_max_features: 10000
-  ngram_range: [1, 2]
-
-  # Hyperparameter Grids for Tuning TF-IDF (for Logistic Regression pipeline)
-  tfidf_max_features_grid: [5000, 10000, 15000]
-  ngram_range_grid: [[1, 1], [1, 2]]
-
-  # Logistic Regression specific parameters grid for tuning (L2 penalty)
-  lr_C_grid: [0.01, 0.1, 1.0, 10.0] # Inverse of regularization strength (C)
+  <<: *common_tfidf_config # Merges all keys from common_tfidf_config here
+  # Logistic Regression specific parameters
+  lr_C_grid: [0.01, 0.1, 1.0, 10.0]
+  lr_max_iter_grid: [100, 200, 500]
+  # If Logistic Regression needs a different TF-IDF tuning grid for a specific parameter:
+  # tfidf_max_features_grid: [10000, 20000, 30000, 50000] # Overrides common grid

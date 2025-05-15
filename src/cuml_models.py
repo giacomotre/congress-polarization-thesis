@@ -19,8 +19,10 @@ from cuml.naive_bayes import ComplementNB
 from cuml.linear_model import LogisticRegression
 from cuml.metrics import accuracy_score as cuml_accuracy_score
 from cuml.metrics import confusion_matrix as cuml_confusion_matrix
-from sklearn.metrics import f1_score as sklearn_f1_score
 from cuml.metrics import roc_auc_score as cuml_roc_auc_score # Add this
+from sklearn.metrics import f1_score as sklearn_f1_score
+from sklearn.metrics import classification_report # Add this line
+
 
 # Import utility functions
 from config_loader import load_config
@@ -120,11 +122,16 @@ def run_model_pipeline(
     param_combinations = {
         'tfidf__max_features': model_config.get("tfidf_max_features_grid", [10000]),
         'tfidf__ngram_range': [tuple(nr) for nr in model_config.get("ngram_range_grid", [[1, 2]])],
+        'tfidf__min_df': model_config.get("tfidf_min_df_grid", [1]), 
     }
     
     model_specific_grid = {}
-    if model_type == 'lr':
-        model_specific_grid['model__C'] = model_config.get('lr_C_grid', [1.0]) # Assuming C for Logistic Regression
+    
+    if model_type == 'bayes':
+        model_specific_grid['model__alpha'] = model_config.get('bayes_alpha_grid', [1.0]) # Add this
+    elif model_type == 'lr':
+        model_specific_grid['model__C'] = model_config.get('lr_C_grid', [1.0])
+        model_specific_grid['model__max_iter'] = model_config.get('lr_max_iter_grid', [1000]) 
 
     param_combinations.update(model_specific_grid)
     grid = ParameterGrid(param_combinations)
@@ -300,88 +307,106 @@ def run_model_pipeline(
 
     # Initialize metrics
     final_accuracy_eval = 0.0
-    #final_f1_weighted_eval = 0.0 now calculate not available
+    final_f1_weighted_eval = 0.0 # now calculate not available
     auc_eval = None
     cm_cpu_eval = None # Initialize cm_cpu_eval
     probability_scores_gpu = None # Initialize for cleanup
     decision_scores_gpu = None # Initialize for cleanup
+    classification_report_dict = {} # Initialize for classification report
 
     # Get predictions (already on GPU)
     y_test_pred_gpu_eval = final_model_instance.predict(X_test_final_tfidf_gpu_eval)
+    
+    # Transfer necessary data from GPU (CuPy arrays) to CPU (NumPy arrays) for scikit-learn metrics
+    y_test_encoded_cpu = cupy.asnumpy(y_test_encoded_gpu_eval)
+    y_test_pred_cpu = cupy.asnumpy(y_test_pred_gpu_eval)
 
-    # Calculate metrics using cuML
+    # --- Calculate target_names_eval (Moved Earlier) ---
     try:
-        # Accuracy
-        final_accuracy_gpu = cuml_accuracy_score(y_test_encoded_gpu_eval, y_test_pred_gpu_eval)
-        final_accuracy_eval = cupy.asnumpy(final_accuracy_gpu).item() if final_accuracy_gpu is not None else 0.0
+        reverse_party_map_eval = {v: k for k, v in party_map.items()}
+        unique_labels_in_test_cpu_eval = sorted(list(np.unique(y_test_encoded_cpu))) # Use y_test_encoded_cpu directly
+        target_names_eval = [reverse_party_map_eval.get(i, str(i)) for i in unique_labels_in_test_cpu_eval]
+    except Exception as e:
+        print(f"Could not get target names for classification report: {e}")
+        # Fallback if party_map is problematic or labels are unexpected
+        if 'y_test_encoded_cpu' in locals() and y_test_encoded_cpu.size > 0:
+             target_names_eval = [str(i) for i in sorted(list(np.unique(y_test_encoded_cpu)))]
+        else: # Absolute fallback if y_test_encoded_cpu isn't even available
+            target_names_eval = [] 
+            print("Warning: y_test_encoded_cpu not available for target_names_eval.")
+            
+    # Calculate metrics using cuML and scikit-learn
+    try:
+        # Accuracy (cuML)
+        # Ensure y_test_pred_gpu_eval is available before using it
+        if 'y_test_pred_gpu_eval' in locals() and y_test_pred_gpu_eval is not None:
+            final_accuracy_gpu = cuml_accuracy_score(y_test_encoded_gpu_eval, y_test_pred_gpu_eval)
+            final_accuracy_eval = cupy.asnumpy(final_accuracy_gpu).item() if final_accuracy_gpu is not None else 0.0
+        else:
+            print("Warning: y_test_pred_gpu_eval not available for accuracy calculation.")
+            final_accuracy_eval = 0.0
 
         # F1 Score (Weighted) using scikit-learn
-        # Transfer necessary data from GPU (CuPy arrays) to CPU (NumPy arrays)
-        y_test_encoded_cpu = cupy.asnumpy(y_test_encoded_gpu_eval)
-        y_test_pred_cpu = cupy.asnumpy(y_test_pred_gpu_eval)
-        
-        # Use sklearn's f1_score
-        # Consider the zero_division parameter:
-        # 'warn' (default): acts like 0, issues a warning.
-        # 0: returns 0.0 for F-score if precision and recall are both zero for a class.
-        # 1: returns 1.0 for F-score if precision and recall are both zero for a class.
         final_f1_weighted_eval = sklearn_f1_score(y_test_encoded_cpu, y_test_pred_cpu, average='weighted', zero_division=0)
-
         
-        # Confusion Matrix
-        cm_gpu_eval_calc = cuml_confusion_matrix(y_test_encoded_gpu_eval, y_test_pred_gpu_eval, convert_dtype=True)
-        cm_cpu_eval = cupy.asnumpy(cm_gpu_eval_calc) if cm_gpu_eval_calc is not None else np.array([])
+        # Confusion Matrix (cuML)
+        if 'y_test_pred_gpu_eval' in locals() and y_test_pred_gpu_eval is not None:
+            cm_gpu_eval_calc = cuml_confusion_matrix(y_test_encoded_gpu_eval, y_test_pred_gpu_eval, convert_dtype=True)
+            cm_cpu_eval = cupy.asnumpy(cm_gpu_eval_calc) if cm_gpu_eval_calc is not None else np.array([])
+        else:
+            print("Warning: y_test_pred_gpu_eval not available for confusion matrix calculation.")
+            cm_cpu_eval = np.array([])
 
         # ROC-AUC Score (Binary Classification)
         if hasattr(final_model_instance, "predict_proba"):
             probability_scores_gpu = final_model_instance.predict_proba(X_test_final_tfidf_gpu_eval)
-            # For binary classification, use probabilities of the positive class (typically index 1)
             auc_gpu = cuml_roc_auc_score(y_test_encoded_gpu_eval, probability_scores_gpu[:, 1])
             auc_eval = cupy.asnumpy(auc_gpu).item() if auc_gpu is not None else None
         elif hasattr(final_model_instance, "decision_function"):
             decision_scores_gpu = final_model_instance.decision_function(X_test_final_tfidf_gpu_eval)
-            # decision_scores_gpu is usually 1D for binary classification
             auc_gpu = cuml_roc_auc_score(y_test_encoded_gpu_eval, decision_scores_gpu)
             auc_eval = cupy.asnumpy(auc_gpu).item() if auc_gpu is not None else None
         else:
             print("Model has neither 'predict_proba' nor 'decision_function'. ROC-AUC cannot be calculated.")
             auc_eval = None
-            
+        
+        # --- Per-Class Metrics (Classification Report) ---
+        if target_names_eval: # Only proceed if we have target names
+            report_str = classification_report(y_test_encoded_cpu, y_test_pred_cpu, target_names=target_names_eval, zero_division=0)
+            print("\nClassification Report:\n", report_str)
+            classification_report_dict = classification_report(y_test_encoded_cpu, y_test_pred_cpu, target_names=target_names_eval, zero_division=0, output_dict=True)
+        else:
+            print("Warning: target_names_eval is empty. Skipping classification report.")
+            classification_report_dict = {}
+
     except Exception as e:
         print(f"Error during cuML and scikit metrics calculation: {e}")
-        # Ensure metrics are default if error occurs mid-calculation
+        import traceback # Good for debugging
+        traceback.print_exc() # Good for debugging
         final_accuracy_eval = 0.0
         final_f1_weighted_eval = 0.0
         auc_eval = None
         cm_cpu_eval = np.array([])
+        classification_report_dict = {}
 
     # Cleanup GPU arrays used for metrics if no longer needed
     if 'y_test_pred_gpu_eval' in locals(): del y_test_pred_gpu_eval
     if probability_scores_gpu is not None: del probability_scores_gpu
     if decision_scores_gpu is not None: del decision_scores_gpu
-    # y_test_encoded_gpu_eval will be cleaned up with other major variables later if needed
-
+    
     evaluation_time = time.time() - start_time_test
     print(f"Evaluation complete in {evaluation_time:.2f} seconds.")
 
     print(f"\n--- Final Test Results ({model_type.upper()}) ---")
     print(f"Accuracy: {final_accuracy_eval:.4f}")
     print(f"Weighted F1 Score: {final_f1_weighted_eval:.4f}")
+    # The classification_report string is already printed above if generated
 
     cm_list_eval = cm_cpu_eval.tolist() if cm_cpu_eval is not None and cm_cpu_eval.size > 0 else []
-
-    try:
-        reverse_party_map_eval = {v: k for k, v in party_map.items()}
-        # Use cupy.asnumpy for unique labels from GPU array if y_test_encoded_gpu_eval is the source
-        unique_labels_in_test_cpu_eval = sorted(list(np.unique(cupy.asnumpy(y_test_encoded_gpu_eval))))
-        target_names_eval = [reverse_party_map_eval.get(i, str(i)) for i in unique_labels_in_test_cpu_eval]
-    except Exception as e:
-        print(f"Could not get target names: {e}")
-        target_names_eval = [str(i) for i in sorted(list(np.unique(cupy.asnumpy(y_test_encoded_gpu_eval))))]
-
+    # target_names_eval is already defined and handled before this print block
 
     if auc_eval is not None: print(f"ROC-AUC          : {auc_eval:.4f}")
-    else: print("ROC-AUC          : NA (Could not be computed or not applicable for multiclass with current cuML-only setup)")
+    else: print("ROC-AUC          : NA")
 
     if cm_cpu_eval is not None and cm_cpu_eval.size > 0: print("Confusion Matrix:\n", cm_cpu_eval)
 
@@ -390,13 +415,15 @@ def run_model_pipeline(
     result_json = {
         "seed": random_state, "year": congress_year, "accuracy": round(final_accuracy_eval, 4),
         "f1_score": round(final_f1_weighted_eval, 4), "auc": round(auc_eval, 4) if auc_eval is not None else "NA",
-        "confusion_matrix": cm_list_eval, "labels": target_names_eval,
-        "best_params": best_params, # Assuming best_params is defined earlier in your script
+        "confusion_matrix": cm_list_eval, 
+        "labels": target_names_eval, # target_names_eval already defined
+        "classification_report": classification_report_dict, # Add the report dictionary
+        "best_params": best_params,
         "timing": {
-            "tuning_sec": round(tuning_time, 2), # Assuming tuning_time is defined
-            "final_train_sec": round(final_train_time, 2), # Assuming final_train_time is defined
+            "tuning_sec": round(tuning_time, 2),
+            "final_train_sec": round(final_train_time, 2),
             "evaluation_sec": round(evaluation_time, 2),
-            "total_pipeline_sec": round(time.time() - start_time_total, 2) # Assuming start_time_total is defined
+            "total_pipeline_sec": round(time.time() - start_time_total, 2)
         }
     }
     
