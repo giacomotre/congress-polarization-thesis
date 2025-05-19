@@ -1,14 +1,17 @@
 name: spacy-gpu
 channels:
-  - conda-forge
-  - pytorch
   - nvidia
+  - pytorch
+  - conda-forge
 dependencies:
   - python=3.10
-  - spacy
-  - spacy-transformers
-  - cupy
   - pytorch
   - torchvision
   - torchaudio
   - pytorch-cuda=11.8
+  - spacy
+  - spacy-transformers
+  - transformers
+  - sentencepiece
+  - cupy
+
