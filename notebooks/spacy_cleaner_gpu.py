@@ -1,3 +1,13 @@
+import warnings
+
+# Suppress the specific FutureWarning related to _register_pytree_node
+# This is quite specific to the message you're seeing.
+warnings.filterwarnings(
+    "ignore",
+    category=FutureWarning,
+    message="`torch.utils._pytree._register_pytree_node` is deprecated.*"
+)
+
 import multiprocessing as mp
 import spacy
 import pandas as pd
@@ -87,7 +97,7 @@ if __name__ == '__main__':
         exit()
 
     # --- Main Processing Loop ---
-    CONGRESS_RANGE = range(76, 77) # Example: Process only Congress 76
+    CONGRESS_RANGE = range(76, 80) # Example: Process only Congress 76
     batch_size = 64
     n_processes = -1 # Use -1 for all cores, or a specific number > 1 for multiprocessing
 
