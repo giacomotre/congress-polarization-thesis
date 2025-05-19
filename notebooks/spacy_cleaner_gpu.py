@@ -1,3 +1,29 @@
+import multiprocessing as mp # Import the multiprocessing library
+
+# Set the start method to 'spawn'
+# This MUST be done in the `if __name__ == '__main__':` block
+# or at the very top level of your script before other relevant imports if not using the block.
+# For scripts, placing it under `if __name__ == '__main__':` is the safest.
+
+# ... (other imports like spacy, pandas, etc.)
+
+if __name__ == '__main__': # Ensures this runs only when script is executed directly
+    try:
+        # Attempt to set the start method. This might need to be done very early.
+        # If it's already been set by another import, this might raise a RuntimeError,
+        # in which case it's often okay if it was already set to 'spawn'.
+        mp.set_start_method('spawn', force=True) # 'force=True' can be helpful
+        print("Multiprocessing start method set to 'spawn'.") # Optional: for confirmation
+    except RuntimeError as e:
+        # This can happen if the start method has already been set (e.g., by another library
+        # or if this script is imported as a module after the parent has set it).
+        # Check if it was already set to spawn.
+        if mp.get_start_method() == 'spawn':
+            print("Multiprocessing start method was already 'spawn'.")
+        else:
+            print(f"Could not set multiprocessing start method to 'spawn': {e}. Current method: {mp.get_start_method()}")
+            # Depending on the error, you might still proceed or exit if it's critical.
+
 import spacy
 from tqdm import tqdm # For progress bars
 import pandas as pd
@@ -14,7 +40,7 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 # --- Load SpaCy Model ---
 try:
-    # spacy.prefer_gpu() # Call this before loading if you have a working GPU setup
+    spacy.prefer_gpu() # Call this before loading if you have a working GPU setup
     nlp = spacy.load("en_core_web_trf")
     logging.info("SpaCy transformer model 'en_core_web_trf' loaded successfully.")
     if spacy.require_gpu(): # Check if SpaCy is actually using GPU
