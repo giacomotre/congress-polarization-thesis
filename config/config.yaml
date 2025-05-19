@@ -48,7 +48,7 @@ svm:
 logistic_regression:
   <<: *common_tfidf_config # Merges all keys from common_tfidf_config here
   # Logistic Regression specific parameters
-  lr_C_grid: [0.01, 0.1, 1.0, 10.0]
+  lr_C_grid: [0.01, 0.1, 1.0]
   lr_max_iter_grid: [100, 200, 500]
   # If Logistic Regression needs a different TF-IDF tuning grid for a specific parameter:
   # tfidf_max_features_grid: [10000, 20000, 30000, 50000] # Overrides common grid
