@@ -104,11 +104,11 @@ if __name__ == '__main__':
     # 3. Load SpaCy Model and other initializations for the main process
     nlp = None # Initialize to None
     try:
-        # spacy.prefer_gpu() # Uncomment if you have a GPU and want to use it
-        # if spacy.prefer_gpu():
-        #    print("Attempted to prefer GPU for SpaCy.")
-        # else:
-        #    print("GPU not available or not preferred for SpaCy.")
+        spacy.prefer_gpu() # Uncomment if you have a GPU and want to use it
+        if spacy.prefer_gpu():
+            print("Attempted to prefer GPU for SpaCy.")
+        else:
+            print("GPU not available or not preferred for SpaCy.")
 
         nlp = spacy.load("en_core_web_trf")
         logging.info("SpaCy transformer model 'en_core_web_trf' loaded successfully (main process).")
@@ -124,7 +124,7 @@ if __name__ == '__main__':
         exit()
 
     # --- Main Processing Loop ---
-    CONGRESS_RANGE = range(76, 80) # Example: Process only Congress 76
+    CONGRESS_RANGE = range(80, 81) # Example: Process only Congress 76
     batch_size = 64
     n_processes = -1 # Use -1 for all cores, or a specific number > 1 for multiprocessing
 
