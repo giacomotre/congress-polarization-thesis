@@ -113,11 +113,11 @@ if __name__ == '__main__':
         nlp = spacy.load("en_core_web_trf")
         logging.info("SpaCy transformer model 'en_core_web_trf' loaded successfully (main process).")
         # Check actual GPU usage after loading the model for TRF models
-        # if "transformer" in nlp.pipe_names:
-        #     if nlp.get_pipe("transformer").model.ops.device_type == "gpu":
-        #         logging.info("SpaCy transformer is using GPU.")
-        #     else:
-        #         logging.info("SpaCy transformer is using CPU.")
+        if "transformer" in nlp.pipe_names:
+             if nlp.get_pipe("transformer").model.ops.device_type == "gpu":
+                 logging.info("SpaCy transformer is using GPU.")
+             else:
+                 logging.info("SpaCy transformer is using CPU.")
 
     except Exception as e:
         logging.critical(f"Could not load SpaCy model or configure GPU: {e}")
@@ -125,7 +125,7 @@ if __name__ == '__main__':
 
     # --- Main Processing Loop ---
     CONGRESS_RANGE = range(80, 81) # Example: Process only Congress 76
-    batch_size = 64
+    batch_size = 256
     n_processes = -1 # Use -1 for all cores, or a specific number > 1 for multiprocessing
 
     base_dir = SCRIPT_DIR / "../data/merged"
