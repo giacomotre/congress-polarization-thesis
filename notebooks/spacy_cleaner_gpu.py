@@ -22,33 +22,60 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 def process_spacy_doc(doc):
     """
     Processes a single SpaCy Doc object to extract cleaned, lemmatized tokens
-    after removing specified entities, stop words, punctuation, and digits.
+    after removing specified entities, stop words, punctuation, digits,
+    currency symbols, and the phrase "mr speaker".
     """
     if not doc or not doc.has_annotation("SENT_START"):
         return []
+
     ents_to_remove_char_spans = []
     if doc.has_annotation("ENT_IOB"):
         for ent in doc.ents:
             if ent.label_ in ["PERSON", "ORG", "GPE", "DATE", "CARDINAL", "PERCENTAGE"]:
                 ents_to_remove_char_spans.append((ent.start_char, ent.end_char))
-    processed_tokens = []
+
+    # Initial pass to get lemmas, filtering out entities, stop words, punct, digits, currency
+    intermediate_lemmas = []
     for token in doc:
         token_in_entity_to_remove = False
         for start_char, end_char in ents_to_remove_char_spans:
             if token.idx >= start_char and (token.idx + len(token.text)) <= end_char:
                 token_in_entity_to_remove = True
                 break
+        
         if token_in_entity_to_remove:
             continue
+
+        # ADDED: token.is_currency check
         if (not token.is_stop and
             not token.is_punct and
             not token.is_digit and
             not token.like_num and
+            not token.is_currency and # New condition
             token.text.strip() != ''):
+            
             lemma = token.lemma_.lower().strip()
             if lemma:
-                processed_tokens.append(lemma)
-    return processed_tokens
+                intermediate_lemmas.append(lemma)
+    
+    # Second pass: Remove "mr speaker" / "mister speaker" sequences
+    final_tokens = []
+    i = 0
+    while i < len(intermediate_lemmas):
+        current_lemma = intermediate_lemmas[i]
+        # Normalize "mr." to "mr" for checking, also handle "mister"
+        is_mr_or_mister = (current_lemma.rstrip('.') == "mr" or current_lemma == "mister")
+
+        if is_mr_or_mister and \
+           (i + 1 < len(intermediate_lemmas)) and \
+           intermediate_lemmas[i+1] == "speaker":
+            i += 2  # Skip both "mr/mister" and "speaker"
+            continue
+        
+        final_tokens.append(current_lemma)
+        i += 1
+            
+    return final_tokens
 
 # ---- Main execution block ----
 if __name__ == '__main__':
