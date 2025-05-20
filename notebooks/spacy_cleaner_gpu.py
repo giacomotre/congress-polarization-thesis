@@ -125,8 +125,8 @@ if __name__ == '__main__':
 
     # --- Main Processing Loop ---
     CONGRESS_RANGE = range(80, 81) # Example: Process only Congress 76
-    batch_size = 256
-    n_processes = -1 # Use -1 for all cores, or a specific number > 1 for multiprocessing
+    batch_size = 64
+    n_processes = 1 # Use -1 for all cores, or a specific number > 1 for multiprocessing
 
     base_dir = SCRIPT_DIR / "../data/merged"
     cleaned_dir = SCRIPT_DIR / "../data/processed"
