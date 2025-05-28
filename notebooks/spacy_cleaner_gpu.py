@@ -158,9 +158,9 @@ if __name__ == '__main__':
 
 
     # --- Main Processing Loop ---
-    CONGRESS_RANGE = range(76, 78) # Example: 76-112
+    CONGRESS_RANGE = range(76, 77) # Example: 76-112
     batch_size = 512 #VRAM usage 10 out of 40, could increase to 256)
-    n_processes = 1 # Use -1 for all cores, or a specific number > 1 for multiprocessing
+    #n_processes = 1 # Use -1 for all cores, or a specific number > 1 for multiprocessing
 
     base_dir = SCRIPT_DIR / "../data/merged"
     cleaned_dir = SCRIPT_DIR / "../data/processed"
@@ -196,7 +196,7 @@ if __name__ == '__main__':
 
         processed_tokens_for_current_df = []
         # The nlp.pipe call is what starts the child processes. It MUST be within this block.
-        for doc in tqdm(nlp.pipe(speeches_to_clean, batch_size=batch_size, n_process=n_processes), 
+        for doc in tqdm(nlp.pipe(speeches_to_clean, batch_size=batch_size, n_process=n_processes_for_spacy), 
                         total=len(speeches_to_clean), desc=f"Cleaning speeches in Congress {year_str}", leave=False):
             cleaned_tokens = process_spacy_doc(doc)
             processed_tokens_for_current_df.append(cleaned_tokens)
