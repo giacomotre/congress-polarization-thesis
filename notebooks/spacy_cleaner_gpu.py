@@ -127,8 +127,8 @@ if __name__ == '__main__':
         exit()
         
     # --- Main Processing Loop ---
-    CONGRESS_RANGE = range(76, 77) # Example: 76-112
-    batch_size = 4096 #VRAM usage 10 out of 40, could increase to 256)
+    CONGRESS_RANGE = range(77, 86) # Example: 76-112
+    batch_size = 2048 #VRAM usage 10 out of 40, could increase to 256)
     n_processes = 1 # Use -1 for all cores, or a specific number > 1 for multiprocessing
 
     base_dir = SCRIPT_DIR / "../data/merged"
