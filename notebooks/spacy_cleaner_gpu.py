@@ -159,7 +159,7 @@ if __name__ == '__main__':
 
     # --- Main Processing Loop ---
     CONGRESS_RANGE = range(76, 77) # Example: 76-112
-    batch_size = 512 #VRAM usage 10 out of 40, could increase to 256)
+    batch_size = 1024 #VRAM usage 10 out of 40, could increase to 256)
     #n_processes = 1 # Use -1 for all cores, or a specific number > 1 for multiprocessing
 
     base_dir = SCRIPT_DIR / "../data/merged"
