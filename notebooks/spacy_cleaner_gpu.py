@@ -14,6 +14,8 @@ import pandas as pd
 from pathlib import Path
 import logging
 from tqdm import tqdm
+import multiprocessing as mp
+import os
 
 # ---- Global constants and function definitions ----
 # These are safe to define at the top level as they don't execute process-creating code on import.
@@ -125,6 +127,35 @@ if __name__ == '__main__':
     except Exception as e:
         logging.critical(f"Could not load SpaCy model or configure GPU: {e}")
         exit()
+        
+# --- Determine the number of processes for nlp.pipe ---
+    try:
+        # Get the number of CPUs allocated by SLURM
+        # Default to a conservative portion of mp.cpu_count() if SLURM_CPUS_PER_TASK is not set
+        # Using mp.cpu_count() // 2 as a fallback, minimum 1.
+        default_cpus_if_slurm_var_missing = max(1, mp.cpu_count() // 2)
+        
+        allocated_cpus_str = os.getenv('SLURM_CPUS_PER_TASK')
+        
+        if allocated_cpus_str:
+            allocated_cpus = int(allocated_cpus_str)
+            logging.info(f"SLURM allocated {allocated_cpus} CPUs per task.")
+        else:
+            allocated_cpus = default_cpus_if_slurm_var_missing
+            logging.info(f"SLURM_CPUS_PER_TASK not set. Defaulting to {allocated_cpus} processes (up to half of total cores: {mp.cpu_count()}).")
+
+        # Use the allocated CPUs, but you might cap it for safety on very large nodes
+        # For example, cap at 16 or 32 unless you are sure about memory usage per process
+        # This example uses the allocated_cpus, ensuring it's at least 1.
+        n_processes_for_spacy = max(1, allocated_cpus)
+        # You could add a further cap: n_processes_for_spacy = min(n_processes_for_spacy, 16) # Example cap
+
+        logging.info(f"SpaCy nlp.pipe will attempt to use n_process = {n_processes_for_spacy}")
+
+    except Exception as e:
+        logging.warning(f"Error determining n_processes dynamically, defaulting to 1: {e}")
+        n_processes_for_spacy = 1
+
 
     # --- Main Processing Loop ---
     CONGRESS_RANGE = range(76, 78) # Example: 76-112
