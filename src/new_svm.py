@@ -114,7 +114,7 @@ def run_model_pipeline(
     
     param_combinations = {
         'tfidf__use_idf': model_config.get("tfidf_use_idf_grid", [True, False]), 
-        'tfidf__norm': model_config.get("tfidf_norm_grid", ['l1', 'l2', None]), 
+        'tfidf__norm': model_config.get("tfidf_norm_grid", ['l1', 'l2']), 
     }
     
     if model_type == 'svm':
