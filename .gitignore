@@ -1,6 +1,7 @@
 /data/*
-!./data/.gitkeep  # For a .gitkeep directly in data
-!data/vocabulary_dumps/.gitkeep 
+!./data/.gitkeep 
+!data/*/
+!data/*/.gitkeep 
 /outputs/*
 !./doutputs/.gitkeep
 /plots/*
