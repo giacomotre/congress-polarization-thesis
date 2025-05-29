@@ -178,7 +178,8 @@ def run_model_pipeline(
                 #model fitting
                 model_params_from_grid = {k.split('__')[1]: v for k, v in params.items() if k.startswith('model__')}
                 if model_type == 'svm':
-                    model_instance = LinearSVC(**model_params_from_grid)
+                    svm_max_iter = model_config.get('max_iter', 5000) # Default to 5000 if not in config
+                    model_instance = LinearSVC(**model_params_from_grid,  max_iter=svm_max_iter)
                     model_instance.fit(X_train_tfidf, y_train_fold_pd)
                     y_pred_val = model_instance.predict(X_val_tfidf)
                     current_score = accuracy_score(y_val_fold_pd, y_pred_val)
@@ -232,7 +233,8 @@ def run_model_pipeline(
     final_model_instance = None # To ensure it's defined for del
 
     if model_type == 'svm':
-        final_model_instance = LinearSVC(**best_model_params_final)
+        svm_max_iter = model_config.get('max_iter', 5000) # Default to 5000 if not in config
+        final_model_instance = LinearSVC(**best_model_params_final, max_iter=svm_max_iter)
         final_model_instance.fit(X_train_val_final_tfidf, y_train_val_encoded_pd_aligned)
     else:
         raise ValueError(f"Unknown model type: {model_type}")
