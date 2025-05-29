@@ -1,7 +1,8 @@
 /data/*
 !./data/.gitkeep 
 !data/*/
-!data/*/.gitkeep 
+data/*/* 
+!data/*/.gitkeep
 /outputs/*
 !./doutputs/.gitkeep
 /plots/*
