@@ -10,39 +10,33 @@ common:
 
   data_params:
     congress_year_start: 76
-    congress_year_end: 87
+    congress_year_end: 77 # For testing, you'll likely expand this later
 
   party_map:
     D: 0 # Democrat
     R: 1 # Republican
 
-# --- Common TF-IDF Default Settings and Tuning Grids ---
+# --- Common TF-IDF Settings and Tuning Grids (FOR FIXED VOCABULARY) ---
 # Define an anchor '&common_tfidf_config' for these settings
 common_tfidf_config: &common_tfidf_config
-  # Default values (if you use them for direct instantiation outside the grid search)
-  tfidf_max_features: 10000
-  ngram_range: [1, 2]
-  tfidf_min_df: 1 # Default for instantiation
-
-  # Hyperparameter Grids for Tuning TF-IDF
-  tfidf_max_features_grid: [5000, 10000, 15000]
-  ngram_range_grid: [[1, 1], [1, 2]]
-  #tfidf_min_df_grid: [2, 5, 0.001] # Example: min count 2, 5, or 0.1% of documents
+  # Hyperparameter Grids for Tuning TF-IDF scoring parameters (with fixed vocabulary)
+  tfidf_use_idf_grid: [True, False]
+  tfidf_norm_grid: ['l1', 'l2', None] # None means no normalization
+  # You could add other tunable TF-IDF params if desired, e.g.:
+  # tfidf_sublinear_tf_grid: [True, False]
 
 # --- Model Specific Parameters and Tuning Grids ---
 
 bayes:
   <<: *common_tfidf_config # Merges all keys from common_tfidf_config here
-  # Bayes-specific parameters can be added or overridden here
+  # Bayes-specific parameters
   bayes_alpha_grid: [0.1, 0.5, 1.0]
-  # Example of overriding a common TF-IDF grid just for Bayes, if needed:
-  # tfidf_ngram_range_grid: [[1, 1]] # This would override the common one
+  # Example: If Bayes specifically should not tune 'norm' or use a different grid:
+  # tfidf_norm_grid: ['l2'] # This would override the common one for Bayes only
 
 svm:
   <<: *common_tfidf_config # Merges all keys from common_tfidf_config here
   # SVM-specific parameters
-  # If SVM needs different TF-IDF instantiation defaults (not grids):
-  # tfidf_max_features: 12000 # This would override the common default
   C_grid: [0.1, 1, 10]
 
 logistic_regression:
@@ -50,5 +44,3 @@ logistic_regression:
   # Logistic Regression specific parameters
   lr_C_grid: [0.01, 0.1, 1.0]
   lr_max_iter_grid: [100, 200, 500]
-  # If Logistic Regression needs a different TF-IDF tuning grid for a specific parameter:
-  # tfidf_max_features_grid: [10000, 20000, 30000, 50000] # Overrides common grid

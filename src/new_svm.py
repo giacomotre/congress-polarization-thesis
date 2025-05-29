@@ -41,7 +41,7 @@ DEFAULT_RANDOM_STATE = split_params.get('random_state', 42)
 SEEDS = split_params.get('seeds', [DEFAULT_RANDOM_STATE])
 
 data_params = common_params.get('data_params', {})
-CONGRESS_YEAR_START = data_params.get('congress_year_start', 75)
+CONGRESS_YEAR_START = data_params.get('congress_year_start', 76)
 CONGRESS_YEAR_END = data_params.get('congress_year_end', 112)
 
 PARTY_MAP = common_params.get('party_map', {})
@@ -101,24 +101,25 @@ def run_model_pipeline(
     X_val_pd: pd.Series, y_val_encoded_pd: pd.Series,
     X_test_pd: pd.Series, y_test_encoded_pd: pd.Series,
     model_type: str, model_config: dict, random_state: int, congress_year: str, party_map: dict,
-    model_plot_output_dir: str
+    model_plot_output_dir: str,
+    fixed_vocabulary_dict: dict
 ):
-    print(f"\n --- Running {model_type.upper()} pipeline [Manual Tuning] for Congress {congress_year} with seed {random_state} ---")
+    print(f"\n --- Running {model_type.upper()} pipeline [Fixed Vocabulary] for Congress {congress_year} with seed {random_state} ---")
+    
     timing = {}
     start_time_total = time.time()
     
-    # loading optimization config
-    param_combinations = {
-        'tfidf__max_features': model_config.get("tfidf_max_features_grid", [10000]),
-        'tfidf__ngram_range': [tuple(nr) for nr in model_config.get("ngram_range_grid", [[1, 2]])],
-        'tfidf__min_df': model_config.get("tfidf_min_df_grid", [1]), 
-    }
-    
+    # --- loading optimization config ---
     model_specific_grid = {}
     
+    param_combinations = {
+        'tfidf__use_idf': model_config.get("tfidf_use_idf_grid", [True, False]), 
+        'tfidf__norm': model_config.get("tfidf_norm_grid", ['l1', 'l2', None]), 
+    }
+    
     if model_type == 'svm':
-        model_specific_grid['model__C'] = model_config.get('C_grid', [1.0]) # Add this 
-
+        model_specific_grid['model__C'] = model_config.get('C_grid', [1.0]) 
+        
     param_combinations.update(model_specific_grid)
     grid = ParameterGrid(param_combinations)
     
@@ -147,10 +148,8 @@ def run_model_pipeline(
     for params in grid:
         print(f"  Testing params: {params}")
         fold_scores = []
-        tfidf_params = {k.split('__')[1]: v for k, v in params.items() if k.startswith('tfidf__')}
-        model_params_from_grid = {k.split('__')[1]: v for k, v in params.items() if k.startswith('model__')}
-
         fold_num = 0
+        
         for train_idx, val_idx in kf.split(X_train_val_combined_pd, y_train_val_encoded_pd_aligned): #how split devide this -> more advance
             fold_num += 1
             X_train_fold_pd = X_train_val_combined_pd.iloc[train_idx]
@@ -161,8 +160,15 @@ def run_model_pipeline(
             # To be defined in the try block
             model_instance = None
             
+            current_tfidf_params_for_cv = {k.split('__')[1]: v for k, v in params.items() if k.startswith('tfidf__')}
             try:
-                cv_tfidf_vectorizer = TfidfVectorizer(**tfidf_params) # cuml.TfidfVectorizer
+                cv_tfidf_vectorizer = TfidfVectorizer(
+                    vocabulary=fixed_vocabulary_dict,
+                    ngram_range=(1, 1),       # The fixed vocab defines the n-grams
+                    lowercase=False,          # Assuming SpaCy handled this
+                    stop_words=None,          # Assuming SpaCy handled this
+                    **current_tfidf_params_for_cv # Add this if you ARE tuning other TF-IDF params
+                )
                 X_train_tfidf = cv_tfidf_vectorizer.fit_transform(X_train_fold_pd)
                 X_val_tfidf = cv_tfidf_vectorizer.transform(X_val_fold_pd)
 
@@ -170,6 +176,7 @@ def run_model_pipeline(
                 y_pred_val = None # Prediction on validation fold
                 
                 #model fitting
+                model_params_from_grid = {k.split('__')[1]: v for k, v in params.items() if k.startswith('model__')}
                 if model_type == 'svm':
                     model_instance = LinearSVC(**model_params_from_grid)
                     model_instance.fit(X_train_tfidf, y_train_fold_pd)
@@ -211,10 +218,16 @@ def run_model_pipeline(
     print("Training final model using best parameters found...")
     start_time_final_train = time.time()
 
-    best_tfidf_params_final = {k.split('__')[1]: v for k, v in best_params.items() if k.startswith('tfidf__')}
+    tuned_tfidf_params_final = {k.split('__')[1]: v for k, v in best_params.items() if k.startswith('tfidf__')}
     best_model_params_final = {k.split('__')[1]: v for k, v in best_params.items() if k.startswith('model__')}
 
-    final_tfidf_vectorizer = TfidfVectorizer(**best_tfidf_params_final) # cuml.TfidfVectorizer
+    final_tfidf_vectorizer = TfidfVectorizer(
+    vocabulary=fixed_vocabulary_dict, # This is passed to run_model_pipeline
+    ngram_range=(1, 1),
+    lowercase=False,
+    stop_words=None,
+    **tuned_tfidf_params_final # This will include the best 'use_idf' and 'norm'
+    )  
     X_train_val_final_tfidf = final_tfidf_vectorizer.fit_transform(X_train_val_combined_pd)
     final_model_instance = None # To ensure it's defined for del
 
@@ -412,9 +425,23 @@ def run_model_pipeline(
 
 # ------ Main Execution -------
 if __name__ == "__main__":
+    
+    # --- load fixed vocabulary ---
+    sklearn_vocab_load_path = Path("/content/drive/MyDrive/congress-polarization-thesis/data/vocabulary_dumps/global_vocabulary_sklearn_from_sklearn.joblib") # Adjust if your path is different
+
+    if not sklearn_vocab_load_path.exists():
+        print(f"ERROR: Fixed vocabulary file not found at {sklearn_vocab_load_path}")
+        print("Please run the global vocabulary generation script first.")
+        exit()
+    
+    print(f"Loading fixed scikit-learn vocabulary from {sklearn_vocab_load_path}...")
+    fixed_sklearn_vocabulary = joblib.load(sklearn_vocab_load_path)
+    print(f"Loaded fixed vocabulary with {len(fixed_sklearn_vocabulary)} terms.")
+    # --- --- --- --- --- 
+    
     congress_years_to_process = [f"{i:03}" for i in range(CONGRESS_YEAR_START, CONGRESS_YEAR_END + 1)]
     models_to_run = ['svm'] 
-
+    
     for seed in SEEDS:
         print(f"\n--- Starting runs for seed: {seed} ---")
         for year_str in congress_years_to_process:
@@ -528,7 +555,8 @@ if __name__ == "__main__":
                         random_state=seed,
                         congress_year=year_str,
                         party_map=PARTY_MAP,
-                        model_plot_output_dir=current_model_plot_dir
+                        model_plot_output_dir=current_model_plot_dir,
+                        fixed_vocabulary_dict=fixed_sklearn_vocabulary
                     )
             except Exception as e:
                 print(f"❌ An error occurred during processing for Congress {year_str} with seed {seed}: {e}")
