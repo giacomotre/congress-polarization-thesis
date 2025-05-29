@@ -38,7 +38,7 @@ svm:
   <<: *common_tfidf_config # Merges all keys from common_tfidf_config here
   # SVM-specific parameters
   C_grid: [0.1, 1, 10]
-  max_iter: 5000
+  max_iter: 10000
 
 logistic_regression:
   <<: *common_tfidf_config # Merges all keys from common_tfidf_config here
