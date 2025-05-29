@@ -427,7 +427,7 @@ def run_model_pipeline(
 if __name__ == "__main__":
     
     # --- load fixed vocabulary ---
-    sklearn_vocab_load_path = Path("../data/vocabulary_dumps/global_vocabulary_processed_v2_100_min_df_cuml_from_sklearn.joblib") # Adjust if your path is different
+    sklearn_vocab_load_path = Path("../data/vocabulary_dumps/global_vocabulary_processed_v2_100_min_df_sklearn_from_sklearn.joblib") # Adjust if your path is different
 
     if not sklearn_vocab_load_path.exists():
         print(f"ERROR: Fixed vocabulary file not found at {sklearn_vocab_load_path}")
