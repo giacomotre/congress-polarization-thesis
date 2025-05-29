@@ -1,67 +1,10 @@
 import re
 import string
 import pandas as pd
-import spacy
 import os
-import nltk
 from pathlib import Path
-from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
 from typing import List, Dict, Any, Tuple, Set
 import joblib
-
-# Ensure required NLTK data is available
-for resource in ["stopwords", "punkt"]:
-    try:
-        nltk.data.find(f"corpora/{resource}") if resource == "stopwords" else nltk.data.find(f"tokenizers/{resource}")
-    except LookupError:
-        nltk.download(resource)
-
-# Load SpaCy English model for lemmatization
-nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
-
-# NLTK stopwords
-STOPWORDS = set(stopwords.words("english"))
-
-# --- Reusable Cleaning Components ---
-def lowercase(text: str) -> str:
-    if not isinstance(text, str):
-        return "" # Handle non-string input gracefully
-    return text.lower()
-
-def remove_punctuation_digits(text: str) -> str:
-    if not isinstance(text, str):
-        return "" # Handle non-string input gracefully
-    return re.sub(rf"[{re.escape(string.punctuation)}\d]", "", text)
-
-def tokenize(text: str) -> List[str]:
-    if not isinstance(text, str):
-        return [] # Handle non-string input gracefully
-    return word_tokenize(text)
-
-def remove_stopwords(tokens: List[str]) -> List[str]:
-    return [w for w in tokens if w not in STOPWORDS]
-
-def lemmatize(tokens: List[str]) -> List[str]:
-    if not tokens: # Handle empty list
-        return []
-    doc = nlp(" ".join(tokens))
-    return [token.lemma_ for token in doc]
-
-# --- TF-IDF-Specific Cleaning ---
-def clean_text_for_tfidf(text: str) -> str:
-    text = lowercase(text)
-    text = remove_punctuation_digits(text)
-    tokens = tokenize(text)
-    tokens = remove_stopwords(tokens)
-    tokens = lemmatize(tokens)
-    return " ".join(tokens)
-
-# --- BERT-Specific Cleaning ---
-def clean_text_for_bert(text: str) -> str:
-    if not isinstance(text, str):
-        return "" # Handle non-string input gracefully
-    return re.sub(r"\s+", " ", text).strip()
 
 # --- Consistent Label Encoding using a Map (Simplified) ---
 # In pipeline_utils.py
