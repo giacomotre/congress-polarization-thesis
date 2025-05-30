@@ -326,9 +326,10 @@ def run_model_pipeline(
             probability_scores = final_model_instance.predict_proba(X_test_final_tfidf_eval)
             auc = roc_auc_score(y_test_encoded_pd, probability_scores[:, 1])
             auc_eval = auc
-        elif hasattr(final_model_instance, "decision_function"):
+        elif hasattr(final_model_instance, "decision_function"): #svc has a decision function
             decision_scores = final_model_instance.decision_function(X_test_final_tfidf_eval)
             auc = roc_auc_score(y_test_encoded_pd, decision_scores)
+            auc_eval = auc
         else:
             print("Model has neither 'predict_proba' nor 'decision_function'. ROC-AUC cannot be calculated.")
             auc_eval = None
