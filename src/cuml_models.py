@@ -113,7 +113,7 @@ def run_model_pipeline(
     X_test_pd: pd.Series, y_test_encoded_pd: pd.Series,
     model_type: str, model_config: dict, random_state: int, congress_year: str, party_map: dict,
     model_plot_output_dir: str, 
-    fixed_vocabulary_dict: dict
+    fixed_vocabulary_dict: cudf.Series
 ):
     print(f"\n --- Running {model_type.upper()} pipeline [Manual Tuning] for Congress {congress_year} with seed {random_state} ---")
     timing = {}
@@ -485,16 +485,28 @@ def run_model_pipeline(
 # ------ Main Execution -------
 if __name__ == "__main__":
     
-    cuml_vocab_load_path = Path("data/vocabulary_dumps/global_vocabulary_processed_v2_100_min_df_cuml_from_sklearn.parquet") # Adjust if your path is different
+    # Path to your Parquet vocabulary file
+    # Ensure this min_df number matches the file you intend to use (e.g., _100_min_df_ or _200_min_df_)
+    cuml_vocab_load_path = Path("data/vocabulary_dumps/global_vocabulary_processed_v2_100_min_df_cuml_from_sklearn.parquet") 
 
     if not cuml_vocab_load_path.exists():
         print(f"ERROR: Fixed vocabulary file not found at {cuml_vocab_load_path}")
         print("Please run the global vocabulary generation script first.")
         exit()
-    
-    print(f"Loading fixed scikit-learn vocabulary from {cuml_vocab_load_path}...")
-    fixed_cuml_vocabulary = joblib.load(cuml_vocab_load_path)
-    print(f"Loaded fixed vocabulary with {len(fixed_cuml_vocabulary)} terms.")
+
+    print(f"Loading fixed vocabulary terms from Parquet file: {cuml_vocab_load_path}...")
+    try:
+        # Load the Parquet file into a cuDF DataFrame
+        vocab_df = cudf.read_parquet(cuml_vocab_load_path)
+        # Extract the 'term' column. This will be a cuDF Series.
+        # cuML's TfidfVectorizer can accept this Series directly.
+        fixed_cuml_vocabulary_terms = vocab_df['term'] 
+        print(f"Loaded fixed vocabulary with {len(fixed_cuml_vocabulary_terms)} terms.")
+    except Exception as e:
+        print(f"Error loading vocabulary from Parquet file {cuml_vocab_load_path}: {e}")
+        import traceback
+        traceback.print_exc()
+        exit()
     # --- --- --- --- --- 
     
     congress_years_to_process = [f"{i:03}" for i in range(CONGRESS_YEAR_START, CONGRESS_YEAR_END + 1)]
@@ -614,7 +626,7 @@ if __name__ == "__main__":
                         congress_year=year_str,
                         party_map=PARTY_MAP,
                         model_plot_output_dir=current_model_plot_dir,
-                        fixed_vocabulary_dict=fixed_cuml_vocabulary
+                        fixed_vocabulary_dict=fixed_cuml_vocabulary_terms
                     )
             except Exception as e:
                 print(f"❌ An error occurred during processing for Congress {year_str} with seed {seed}: {e}")
