@@ -1,12 +1,12 @@
 import os
+os.environ['CUDF_USE_KVIKIO'] = '0' # Disable KvikIO/cuFile
+
 import pandas as pd
 import joblib
 import json
 import time
 import numpy as np
 from pathlib import Path
-
-os.environ['CUDF_USE_KVIKIO'] = '0' # Disable KvikIO/cuFile
 
 # Import RAPIDS components
 import cudf
@@ -487,38 +487,50 @@ def run_model_pipeline(
 # ------ Main Execution -------
 if __name__ == "__main__":
     
+    # (Make sure 'import pandas as pd', 'import cudf', 'from pathlib import Path' are at the top of your script)
+
     # Path to your Parquet vocabulary file
     # Ensure this min_df number matches the file you intend to use (e.g., _100_min_df_ or _200_min_df_)
-    cuml_vocab_load_path = Path("data/vocabulary_dumps/global_vocabulary_processed_v2_100_min_df_cuml_from_sklearn.parquet") 
-    
-    print(f"Attempting to read Parquet file with pandas: {cuml_vocab_load_path}")
-try:
-    pandas_df = pd.read_parquet(cuml_vocab_load_path)
-    print(f"Successfully read Parquet file with pandas. Shape: {pandas_df.shape}")
-    print(pandas_df.head())
-except Exception as e:
-    print(f"Error reading Parquet file with pandas: {e}")
-    # If pandas also fails, the file might be corrupted, or there's a more fundamental access issue.
-    # If pandas succeeds, the issue is very likely with cuDF's GDS/KvikIO path.
+    cuml_vocab_load_path = Path("data/vocabulary_dumps/global_vocabulary_processed_v2_100_min_df_cuml_from_sklearn.parquet")
 
+    # --- 1. Check if the vocabulary file exists FIRST ---
     if not cuml_vocab_load_path.exists():
         print(f"ERROR: Fixed vocabulary file not found at {cuml_vocab_load_path}")
         print("Please run the global vocabulary generation script first.")
         exit()
 
-    print(f"Loading fixed vocabulary terms from Parquet file: {cuml_vocab_load_path}...")
+    # --- 2. (Optional Diagnostic) Attempt to read with pandas ---
+    # This helped confirm your file is valid. You can keep it or comment it out later.
+    print(f"Attempting to read Parquet file with pandas (diagnostic): {cuml_vocab_load_path}")
+    try:
+        pandas_df = pd.read_parquet(cuml_vocab_load_path)
+        print(f"Successfully read Parquet file with pandas. Shape: {pandas_df.shape}")
+        print(pandas_df.head())
+    except Exception as e:
+        print(f"Error reading Parquet file with pandas (diagnostic): {e}")
+        # If pandas reading fails, it might indicate a more fundamental issue with the file
+        # or its accessibility, even beyond cuDF's specific I/O.
+        # You could choose to exit here if pandas read is critical for diagnostics or a fallback.
+        # exit() # Optional: exit if pandas diagnostic fails
+
+    # --- 3. Load the vocabulary using cuDF (Main Goal) ---
+    print(f"DEBUG: About to attempt cudf.read_parquet for: {cuml_vocab_load_path}") # Crucial debug line
     try:
         # Load the Parquet file into a cuDF DataFrame
-        vocab_df = cudf.read_parquet(cuml_vocab_load_path)
+        vocab_df_cudf = cudf.read_parquet(cuml_vocab_load_path)
         # Extract the 'term' column. This will be a cuDF Series.
-        # cuML's TfidfVectorizer can accept this Series directly.
-        fixed_cuml_vocabulary_terms = vocab_df['term'] 
-        print(f"Loaded fixed vocabulary with {len(fixed_cuml_vocabulary_terms)} terms.")
+        # cuML's TfidfVectorizer can accept this Series directly for its 'vocabulary' parameter.
+        fixed_cuml_vocabulary_terms = vocab_df_cudf['term']
+        print(f"Successfully loaded fixed vocabulary with cuDF. Shape: {vocab_df_cudf.shape}, Terms: {len(fixed_cuml_vocabulary_terms)}")
     except Exception as e:
-        print(f"Error loading vocabulary from Parquet file {cuml_vocab_load_path}: {e}")
+        print(f"Error loading vocabulary from Parquet file with cuDF: {e}")
         import traceback
         traceback.print_exc()
         exit()
+
+# Now, fixed_cuml_vocabulary_terms should be a cuDF Series containing your vocabulary
+# This is the variable you'll pass to your run_model_pipeline function, for example:
+# fixed_vocabulary_terms=fixed_cuml_vocabulary_terms
     # --- --- --- --- --- 
     
     congress_years_to_process = [f"{i:03}" for i in range(CONGRESS_YEAR_START, CONGRESS_YEAR_END + 1)]
