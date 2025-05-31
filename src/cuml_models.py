@@ -6,6 +6,8 @@ import time
 import numpy as np
 from pathlib import Path
 
+os.environ['CUDF_USE_KVIKIO'] = '0' # Disable KvikIO/cuFile
+
 # Import RAPIDS components
 import cudf
 import cupy
@@ -488,6 +490,16 @@ if __name__ == "__main__":
     # Path to your Parquet vocabulary file
     # Ensure this min_df number matches the file you intend to use (e.g., _100_min_df_ or _200_min_df_)
     cuml_vocab_load_path = Path("data/vocabulary_dumps/global_vocabulary_processed_v2_100_min_df_cuml_from_sklearn.parquet") 
+    
+    print(f"Attempting to read Parquet file with pandas: {cuml_vocab_load_path}")
+try:
+    pandas_df = pd.read_parquet(cuml_vocab_load_path)
+    print(f"Successfully read Parquet file with pandas. Shape: {pandas_df.shape}")
+    print(pandas_df.head())
+except Exception as e:
+    print(f"Error reading Parquet file with pandas: {e}")
+    # If pandas also fails, the file might be corrupted, or there's a more fundamental access issue.
+    # If pandas succeeds, the issue is very likely with cuDF's GDS/KvikIO path.
 
     if not cuml_vocab_load_path.exists():
         print(f"ERROR: Fixed vocabulary file not found at {cuml_vocab_load_path}")
