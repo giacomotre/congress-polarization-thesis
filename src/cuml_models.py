@@ -136,6 +136,9 @@ def run_model_pipeline(
     elif model_type == 'lr':
         model_specific_grid['model__C'] = model_config.get('lr_C_grid', [1.0])
         model_specific_grid['model__max_iter'] = model_config.get('lr_max_iter_grid', [1000]) 
+        model_specific_grid['model__penalty'] = model_config.get('lr_penalty_grid', ['l1', 'l2'])
+        model_specific_grid['model__class_weight'] = model_config.get('lr_class_weight_grid', [None, 'balanced'])
+        
 
     param_combinations.update(model_specific_grid)
     grid = ParameterGrid(param_combinations)
@@ -213,7 +216,7 @@ def run_model_pipeline(
                     current_score = cuml_accuracy_score(cupy.asnumpy(y_val_fold_cupy), y_pred_val_cpu_fold)
 
                 elif model_type == 'lr':
-                    model_instance = LogisticRegression(penalty='l2', **model_params_from_grid)
+                    model_instance = LogisticRegression(**model_params_from_grid)
                     model_instance.fit(X_train_tfidf_gpu, y_train_fold_cupy)
                     y_pred_val_gpu = model_instance.predict(X_val_tfidf_gpu)
                     y_pred_val_cpu_fold = cupy.asnumpy(y_pred_val_gpu)
@@ -280,7 +283,7 @@ def run_model_pipeline(
         final_model_instance = ComplementNB(**best_model_params_final)
         final_model_instance.fit(X_train_val_final_tfidf_gpu, y_train_val_final_cupy)
     elif model_type == 'lr':
-        final_model_instance = LogisticRegression(penalty='l2', **best_model_params_final)
+        final_model_instance = LogisticRegression(**best_model_params_final)
         final_model_instance.fit(X_train_val_final_tfidf_gpu, y_train_val_final_cupy)
     else:
         raise ValueError(f"Unknown model type: {model_type}")

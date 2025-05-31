@@ -31,6 +31,7 @@ bayes:
   <<: *common_tfidf_config # Merges all keys from common_tfidf_config here
   # Bayes-specific parameters
   bayes_alpha_grid: [0.1, 0.5, 1.0]
+  #already balance calss weght
   # Example: If Bayes specifically should not tune 'norm' or use a different grid:
   # tfidf_norm_grid: ['l2'] # This would override the common one for Bayes only
 
@@ -44,4 +45,6 @@ logistic_regression:
   <<: *common_tfidf_config # Merges all keys from common_tfidf_config here
   # Logistic Regression specific parameters
   lr_C_grid: [0.01, 0.1, 1.0]
-  lr_max_iter_grid: [100, 200, 500]
+  lr_max_iter_grid: [200, 500, 1000] #100 iteration was too litle
+  lr_penalty_grid: ['l1', 'l2'] #before l2 was hard coded
+  lr_class_weight_grid: [null, 'balanced'] #class wieght
