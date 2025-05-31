@@ -22,6 +22,7 @@ dependencies:
   - scikit-learn # For train_test_split, KFold, ParameterGrid, f1_score, classification_report
   - joblib
   - matplotlib # Likely needed by plotting_utils
+  - seaborn
 
   # --- Optional: For Development & Notebooks (Highly Recommended) ---
   - jupyterlab # For an integrated development environment with notebooks
