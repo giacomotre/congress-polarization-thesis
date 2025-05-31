@@ -487,46 +487,33 @@ def run_model_pipeline(
 # ------ Main Execution -------
 if __name__ == "__main__":
     
-    # (Make sure 'import pandas as pd', 'import cudf', 'from pathlib import Path' are at the top of your script)
+    # (os.environ setting should still be at the top, just in case it affects other parts of cuDF)
+    # (Ensure 'import pandas as pd' and 'import cudf' are at the script's top)
 
-    # Path to your Parquet vocabulary file
-    # Ensure this min_df number matches the file you intend to use (e.g., _100_min_df_ or _200_min_df_)
     cuml_vocab_load_path = Path("data/vocabulary_dumps/global_vocabulary_processed_v2_100_min_df_cuml_from_sklearn.parquet")
 
-    # --- 1. Check if the vocabulary file exists FIRST ---
     if not cuml_vocab_load_path.exists():
         print(f"ERROR: Fixed vocabulary file not found at {cuml_vocab_load_path}")
         print("Please run the global vocabulary generation script first.")
         exit()
 
-    # --- 2. (Optional Diagnostic) Attempt to read with pandas ---
-    # This helped confirm your file is valid. You can keep it or comment it out later.
-    print(f"Attempting to read Parquet file with pandas (diagnostic): {cuml_vocab_load_path}")
+    print(f"Attempting to read Parquet file with pandas (as primary method for vocab): {cuml_vocab_load_path}")
     try:
-        pandas_df = pd.read_parquet(cuml_vocab_load_path)
-        print(f"Successfully read Parquet file with pandas. Shape: {pandas_df.shape}")
-        print(pandas_df.head())
-    except Exception as e:
-        print(f"Error reading Parquet file with pandas (diagnostic): {e}")
-        # If pandas reading fails, it might indicate a more fundamental issue with the file
-        # or its accessibility, even beyond cuDF's specific I/O.
-        # You could choose to exit here if pandas read is critical for diagnostics or a fallback.
-        # exit() # Optional: exit if pandas diagnostic fails
+        pandas_df_vocab = pd.read_parquet(cuml_vocab_load_path)
+        print(f"Successfully read Parquet file with pandas. Shape: {pandas_df_vocab.shape}")
 
-    # --- 3. Load the vocabulary using cuDF (Main Goal) ---
-    print(f"DEBUG: About to attempt cudf.read_parquet for: {cuml_vocab_load_path}") # Crucial debug line
-    try:
-        # Load the Parquet file into a cuDF DataFrame
-        vocab_df_cudf = cudf.read_parquet(cuml_vocab_load_path)
-        # Extract the 'term' column. This will be a cuDF Series.
-        # cuML's TfidfVectorizer can accept this Series directly for its 'vocabulary' parameter.
-        fixed_cuml_vocabulary_terms = vocab_df_cudf['term']
-        print(f"Successfully loaded fixed vocabulary with cuDF. Shape: {vocab_df_cudf.shape}, Terms: {len(fixed_cuml_vocabulary_terms)}")
+        print("Converting pandas DataFrame vocabulary to cuDF Series...")
+        # Assuming the vocabulary is in the 'term' column as per your saving script
+        fixed_cuml_vocabulary_terms = cudf.Series(pandas_df_vocab['term'])
+        print(f"Successfully converted to cuDF Series. Length: {len(fixed_cuml_vocabulary_terms)}")
+
     except Exception as e:
-        print(f"Error loading vocabulary from Parquet file with cuDF: {e}")
+        print(f"Error reading Parquet file with pandas or converting to cuDF: {e}")
         import traceback
         traceback.print_exc()
         exit()
+
+    # Now, fixed_cuml_vocabulary_terms is a cuDF Series ready for use
 
 # Now, fixed_cuml_vocabulary_terms should be a cuDF Series containing your vocabulary
 # This is the variable you'll pass to your run_model_pipeline function, for example:
