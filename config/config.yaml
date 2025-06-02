@@ -6,11 +6,11 @@ common:
     test_size: 0.15
     validation_size: 0.25
     random_state: 42
-    seeds: [42] #, 123, 789
+    seeds: [42, 123, 789] #, 123, 789
 
   data_params:
     congress_year_start: 76
-    congress_year_end: 77 # is included
+    congress_year_end: 86 # is included
 
   party_map:
     D: 0 # Democrat
