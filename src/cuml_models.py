@@ -5,6 +5,7 @@ import pandas as pd
 import joblib
 import json
 import time
+import pickle
 import numpy as np
 from pathlib import Path
 
@@ -282,9 +283,29 @@ def run_model_pipeline(
     if model_type == 'bayes':
         final_model_instance = ComplementNB(**best_model_params_final)
         final_model_instance.fit(X_train_val_final_tfidf_gpu, y_train_val_final_cupy)
+        
+        global congress_feature_importance_bayes
+        if hasattr(final_model_instance, 'feature_log_prob_'):
+            coefficients = final_model_instance.feature_log_prob_[1] - final_model_instance.feature_log_prob_[0]
+            feature_names = final_tfidf_vectorizer.get_feature_names_out()
+            feature_importance = dict(zip(feature_names, coefficients))
+            
+            congress_seed_key = f"{congress_year}_{random_state}"
+            congress_feature_importance_bayes[congress_seed_key] = feature_importance
+
     elif model_type == 'lr':
         final_model_instance = LogisticRegression(**best_model_params_final)
         final_model_instance.fit(X_train_val_final_tfidf_gpu, y_train_val_final_cupy)
+        
+        global congress_feature_importance_lr
+        coefficients = final_model_instance.coef_[0]
+        feature_names = final_tfidf_vectorizer.get_feature_names_out()
+        feature_importance = dict(zip(feature_names, coefficients))
+        
+        congress_seed_key = f"{congress_year}_{random_state}"
+        congress_feature_importance_lr[congress_seed_key] = feature_importance
+            
+        print(f"Extracted feature importance for Congress {congress_year}, seed {random_state} (LR)")
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
@@ -486,6 +507,17 @@ def run_model_pipeline(
 
     return result_json
 
+def save_feature_importance(feature_dict, model_type, output_dir="feature_importance"):
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+    
+    filename = output_path / f"congress_feature_importance_{model_type}.pkl"
+    
+    with open(filename, 'wb') as f:
+        pickle.dump(feature_dict, f)
+    
+    print(f"Feature importance dictionary saved to: {filename}")
+    return filename
 
 # ------ Main Execution -------
 if __name__ == "__main__":
@@ -516,15 +548,12 @@ if __name__ == "__main__":
         traceback.print_exc()
         exit()
 
-    # Now, fixed_cuml_vocabulary_terms is a cuDF Series ready for use
-
-# Now, fixed_cuml_vocabulary_terms should be a cuDF Series containing your vocabulary
-# This is the variable you'll pass to your run_model_pipeline function, for example:
-# fixed_vocabulary_terms=fixed_cuml_vocabulary_terms
     # --- --- --- --- --- 
     
     congress_years_to_process = [f"{i:03}" for i in range(CONGRESS_YEAR_START, CONGRESS_YEAR_END + 1)]
     models_to_run = ['bayes', 'lr',] 
+    congress_feature_importance_bayes = {}
+    congress_feature_importance_lr = {}
 
     for seed in SEEDS:
         print(f"\n--- Starting runs for seed: {seed} ---")
@@ -706,4 +735,13 @@ if __name__ == "__main__":
             print(f"An error occurred during avg calculation or plotting for {model_type_to_plot.upper()}: {e}")
             import traceback
             traceback.print_exc()
+    
+    # Save both dictionaries
+    print("Saving feature importance dictionaries...")
+    save_feature_importance(congress_feature_importance_bayes, "bayes")
+    save_feature_importance(congress_feature_importance_lr, "lr")
+
+    print(f"Bayes combinations saved: {len(congress_feature_importance_bayes)}")
+    print(f"LR combinations saved: {len(congress_feature_importance_lr)}")
+    
     print("\n--- Script finished ---")

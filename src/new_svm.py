@@ -654,7 +654,8 @@ if __name__ == "__main__":
             import traceback
             traceback.print_exc()
             
-    # Save feature importance
-    save_feature_importance(congress_feature_importance, model_type="svm")
+    print("Saving feature importance dictionary...")
+    save_feature_importance(congress_feature_importance, model_type="svm")  # or whatever model_type you're using
+    print(f"Total congress-seed combinations saved: {len(congress_feature_importance)}")
 
     print("\n--- Script finished ---")
