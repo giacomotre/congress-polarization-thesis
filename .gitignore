@@ -16,3 +16,5 @@ __pycache__/
 /roberta_output/*
 !./roberta_output/.gitkeep
 /notebooks/models_avg_results
+/feature_importance/*
+!./feature_importance/.gitkeep
