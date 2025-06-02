@@ -3,6 +3,7 @@ import pandas as pd
 import joblib
 import json
 import time
+import pickle
 import numpy as np
 from pathlib import Path
 
@@ -236,9 +237,20 @@ def run_model_pipeline(
         svm_max_iter = model_config.get('max_iter', 5000) # Default to 5000 if not in config
         final_model_instance = LinearSVC(**best_model_params_final, max_iter=svm_max_iter)
         final_model_instance.fit(X_train_val_final_tfidf, y_train_val_encoded_pd_aligned)
+        
+        # Extract coefficients for feature importance analysis
+        coefficients = final_model_instance.coef_[0]  # Shape: (n_features,)
+        feature_names = final_tfidf_vectorizer.get_feature_names_out()
+        feature_importance = dict(zip(feature_names, coefficients))
+        
+        # Create a unique key for this congress-seed combination
+        congress_seed_key = f"{congress_year}_{random_state}"
+        congress_feature_importance[congress_seed_key] = feature_importance
+        
+        print(f"Extracted feature importance for Congress {congress_year}, seed {random_state}")
     else:
         raise ValueError(f"Unknown model type: {model_type}")
-
+    
     final_train_time = time.time() - start_time_final_train
     print(f"Final model training complete in {final_train_time:.2f} seconds.")
 
@@ -425,6 +437,22 @@ def run_model_pipeline(
 
     return result_json
 
+    # After your main loops complete, save the dictionary
+def save_feature_importance(congress_feature_importance, model_type, output_dir="feature_importance"):
+    """
+    Save the feature importance dictionary
+    """
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+    
+    filename = output_path / f"congress_feature_importance_{model_type}.pkl"
+    
+    with open(filename, 'wb') as f:
+        pickle.dump(congress_feature_importance, f)
+    
+    print(f"Feature importance dictionary saved to: {filename}")
+    return filename
+
 
 # ------ Main Execution -------
 if __name__ == "__main__":
@@ -444,6 +472,7 @@ if __name__ == "__main__":
     
     congress_years_to_process = [f"{i:03}" for i in range(CONGRESS_YEAR_START, CONGRESS_YEAR_END + 1)]
     models_to_run = ['svm'] 
+    congress_feature_importance = {}
     
     for seed in SEEDS:
         print(f"\n--- Starting runs for seed: {seed} ---")
@@ -624,4 +653,8 @@ if __name__ == "__main__":
             print(f"An error occurred during avg calculation or plotting for {model_type_to_plot.upper()}: {e}")
             import traceback
             traceback.print_exc()
+            
+    # Save feature importance
+    save_feature_importance(congress_feature_importance, model_type="svm")
+
     print("\n--- Script finished ---")
