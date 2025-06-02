@@ -65,5 +65,3 @@ if __name__ == "__main__":
     
 print(congress_top_terms)
     
-    # Now you can run all your feature importance analysis here
-    # without re-running the expensive model training
