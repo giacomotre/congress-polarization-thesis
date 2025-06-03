@@ -287,7 +287,7 @@ def run_model_pipeline(
         global congress_feature_importance_bayes
         if hasattr(final_model_instance, 'feature_log_prob_'):
             coefficients = final_model_instance.feature_log_prob_[1] - final_model_instance.feature_log_prob_[0]
-            feature_names = final_tfidf_vectorizer.get_feature_names()
+            feature_names = final_tfidf_vectorizer.get_feature_names().values()
             feature_importance = dict(zip(feature_names, coefficients))
             
             congress_seed_key = f"{congress_year}_{random_state}"
@@ -299,7 +299,7 @@ def run_model_pipeline(
         
         global congress_feature_importance_lr
         coefficients = final_model_instance.coef_[0]
-        feature_names = final_tfidf_vectorizer.get_feature_names()
+        feature_names = final_tfidf_vectorizer.get_feature_names().values()
         feature_importance = dict(zip(feature_names, coefficients))
         
         congress_seed_key = f"{congress_year}_{random_state}"
