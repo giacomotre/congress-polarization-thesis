@@ -10,7 +10,7 @@ def load_and_analyze_feature_importance():
         congress_feature_importance = pickle.load(f)
     
     print(f"Loaded feature importance for {len(congress_feature_importance)} congress-seed combinations")
-    
+    print(congress_feature_importance)
     # Example analysis: Get top features for each congress (averaging across seeds)
     congress_nums = set()
     for key in congress_feature_importance.keys():
@@ -63,5 +63,5 @@ if __name__ == "__main__":
         congress_top_terms[congress_num] = get_top_discriminative_terms(importance_dict)
         evolution_df = create_evolution_dataframe(congress_top_terms)
     
-print(congress_top_terms)
+#print(congress_top_terms)
     
