@@ -165,7 +165,7 @@ def run_model_pipeline(
             try:
                 cv_tfidf_vectorizer = TfidfVectorizer(
                     vocabulary=fixed_vocabulary_dict,
-                    ngram_range=(1, 1),       # The fixed vocab defines the n-grams
+                    ngram_range=(1, 2),       # The fixed vocab defines the n-grams CHANGEEEE
                     lowercase=False,          # Assuming SpaCy handled this
                     stop_words=None,          # Assuming SpaCy handled this
                     **current_tfidf_params_for_cv # Add this if you ARE tuning other TF-IDF params
@@ -225,7 +225,7 @@ def run_model_pipeline(
 
     final_tfidf_vectorizer = TfidfVectorizer(
     vocabulary=fixed_vocabulary_dict, # This is passed to run_model_pipeline
-    ngram_range=(1, 1),
+    ngram_range=(1, 2), #CHANGEEEE
     lowercase=False,
     stop_words=None,
     **tuned_tfidf_params_final # This will include the best 'use_idf' and 'norm'
@@ -254,7 +254,7 @@ def run_model_pipeline(
     final_train_time = time.time() - start_time_final_train
     print(f"Final model training complete in {final_train_time:.2f} seconds.")
 
-    print(f"Saving the final TF-IDF and {model_type.upper()} model...")
+    """print(f"Saving the final TF-IDF and {model_type.upper()} model...")
     model_dir_path = Path("models")
     model_dir_path.mkdir(parents=True, exist_ok=True)
     tfidf_filename = model_dir_path / f"tfidf_{model_type}_{congress_year}_seed{random_state}_vectorizer.joblib"
@@ -265,7 +265,7 @@ def run_model_pipeline(
         print(f"Final TF-IDF saved to {tfidf_filename}")
         print(f"Final Model saved to {model_filename}")
     except Exception as e:
-        print(f"Error saving the final components: {e}")
+        print(f"Error saving the final components: {e}")"""
 
     print("Preparing test data for evaluation...")
     if X_test_pd.empty:
