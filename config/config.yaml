@@ -45,6 +45,6 @@ logistic_regression:
   <<: *common_tfidf_config # Merges all keys from common_tfidf_config here
   # Logistic Regression specific parameters
   lr_C_grid: [0.01, 0.1, 1.0]
-  lr_max_iter_grid: [200, 500, 1000] #100 iteration was too litle
+  lr_max_iter_grid: [500] #100 iteration was too litle, 200, 1000 too many 
   lr_penalty_grid: ['l1', 'l2'] #before l2 was hard coded
   lr_class_weight_grid: [null, 'balanced'] #class wieght

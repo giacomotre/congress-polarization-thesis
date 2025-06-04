@@ -290,6 +290,7 @@ def run_model_pipeline(
             feature_names = final_tfidf_vectorizer.get_feature_names().to_pandas()
             feature_importance = dict(zip(feature_names, coefficients))
             
+            
             congress_seed_key = f"{congress_year}_{random_state}"
             congress_feature_importance_bayes[congress_seed_key] = feature_importance
 
@@ -525,7 +526,7 @@ if __name__ == "__main__":
     # (os.environ setting should still be at the top, just in case it affects other parts of cuDF)
     # (Ensure 'import pandas as pd' and 'import cudf' are at the script's top)
 
-    cuml_vocab_load_path = Path("data/vocabulary_dumps/global_vocabulary_processed_v2_100_min_df_cuml_from_sklearn.parquet")
+    cuml_vocab_load_path = Path("data/vocabulary_dumps/1_word/global_vocabulary_processed_bigram_100_min_df_cuml_from_sklearn.parquet")
 
     if not cuml_vocab_load_path.exists():
         print(f"ERROR: Fixed vocabulary file not found at {cuml_vocab_load_path}")
