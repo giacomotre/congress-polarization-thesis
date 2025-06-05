@@ -10,7 +10,7 @@ common:
 
   data_params:
     congress_year_start: 76
-    congress_year_end: 76 # is included
+    congress_year_end: 78 # is included
 
   party_map:
     D: 0 # Democrat
@@ -20,7 +20,7 @@ common:
 # Define an anchor '&common_tfidf_config' for these settings
 common_tfidf_config: &common_tfidf_config
   # Hyperparameter Grids for Tuning TF-IDF scoring parameters (with fixed vocabulary)
-  tfidf_use_idf_grid: [True, False]
+  #tfidf_use_idf_grid: [True, False]
   tfidf_norm_grid: ['l1', 'l2'] # None means no normalization
   # You could add other tunable TF-IDF params if desired, e.g.:
   # tfidf_sublinear_tf_grid: [True, False]

@@ -113,10 +113,10 @@ def run_model_pipeline(
     # --- loading optimization config ---
     model_specific_grid = {}
     
-    param_combinations = {
-        'tfidf__use_idf': model_config.get("tfidf_use_idf_grid", [True, False]), 
+    param_combinations = { 
         'tfidf__norm': model_config.get("tfidf_norm_grid", ['l1', 'l2']), 
     }
+    #'tfidf__use_idf': model_config.get("tfidf_use_idf_grid", [True, False]),
     
     if model_type == 'svm':
         model_specific_grid['model__C'] = model_config.get('C_grid', [1.0]) 

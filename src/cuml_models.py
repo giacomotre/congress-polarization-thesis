@@ -126,9 +126,10 @@ def run_model_pipeline(
     model_specific_grid = {}
     
     param_combinations = {
-        'tfidf__use_idf': model_config.get("tfidf_use_idf_grid", [True, False]), 
         'tfidf__norm': model_config.get("tfidf_norm_grid", ['l1', 'l2']), 
     }
+    
+    # 'tfidf__use_idf': model_config.get("tfidf_use_idf_grid", [True, False]),
     
     model_specific_grid = {}
     
