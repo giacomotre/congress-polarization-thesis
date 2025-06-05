@@ -71,7 +71,7 @@ timing_log_paths = {
 }
 
 # detail csv file header
-detailed_csv_header_columns = ["seed", "year", "accuracy", "f1_score", "auc", "best param"]
+detailed_csv_header_columns = ["seed", "year", "accuracy", "f1_score", "auc", "model_C", "tfidf_norm"]
 detailed_csv_header = ",".join(detailed_csv_header_columns) + "\n"
 
 for model_type, log_path in detailed_log_paths.items():
@@ -412,16 +412,37 @@ def run_model_pipeline(
             f"{result_json['timing']['evaluation_sec']},"
             f"{result_json['timing']['total_pipeline_sec']}\n"
         )
-    
+        
     current_detailed_log_path = detailed_log_paths[model_type]
     with open(current_detailed_log_path, "a") as f:
+        # Extract individual parameters from best_params
+        best_params = result_json['best_params']
+        
+        # Extract SVM C parameter
+        if 'model__C' in best_params:
+            model_C = best_params['model__C']
+        elif 'svm_C' in best_params:
+            model_C = best_params['svm_C']
+        else:
+            model_C = 1.0
+        
+        # Extract TF-IDF norm parameter
+        if 'tfidf__norm' in best_params:
+            tfidf_norm = best_params['tfidf__norm']
+        elif 'tfidf_norm' in best_params:
+            tfidf_norm = best_params['tfidf_norm']
+        else:
+            tfidf_norm = 'l2'
+        
+        # Write to detailed log with individual parameter columns
         f.write(
-            f"{result_json['seed']},"       # Assuming seed and year are not problematic
+            f"{result_json['seed']},"
             f"{result_json['year']},"
             f"{result_json['accuracy']},"
             f"{result_json['f1_score']},"
             f"{result_json['auc']},"
-            f"{result_json['best_params']}\n"
+            f"{model_C},"
+            f"{tfidf_norm}\n"
         )
 
     # Cleanup remaining major variables from this pipeline run
@@ -437,6 +458,8 @@ def run_model_pipeline(
     if 'final_model_instance' in locals(): del final_model_instance
 
     return result_json
+
+
 
     # After your main loops complete, save the dictionary
 def save_feature_importance(congress_feature_importance, model_type, output_dir="feature_importance"):
