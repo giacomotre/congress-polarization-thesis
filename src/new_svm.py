@@ -420,7 +420,8 @@ def run_model_pipeline(
             f"{result_json['year']},"
             f"{result_json['accuracy']},"
             f"{result_json['f1_score']},"
-            f"{result_json['auc']}\n" 
+            f"{result_json['auc']},"
+            f"{result_json['best_params']}\n"
         )
 
     # Cleanup remaining major variables from this pipeline run
