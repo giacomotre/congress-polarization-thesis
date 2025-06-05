@@ -625,7 +625,7 @@ if __name__ == "__main__":
                 continue
 
             df_detailed_metrics['auc'] = pd.to_numeric(df_detailed_metrics['auc'], errors='coerce')
-            df_avg_metrics = df_detailed_metrics.groupby('year')[['accuracy', 'f1_score', 'auc']].mean(numeric_only=True).reset_index()
+            df_avg_metrics = df_detailed_metrics.groupby('year')[['accuracy', 'f1_score', 'auc','best param']].mean(numeric_only=True).reset_index()
 
             if df_avg_metrics.empty:
                 print(f"Warning: No data to average for {model_type_to_plot.upper()}. Skipping plotting.")

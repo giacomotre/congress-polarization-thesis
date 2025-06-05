@@ -524,9 +524,6 @@ def save_feature_importance(feature_dict, model_type, output_dir="feature_import
 # ------ Main Execution -------
 if __name__ == "__main__":
     
-    # (os.environ setting should still be at the top, just in case it affects other parts of cuDF)
-    # (Ensure 'import pandas as pd' and 'import cudf' are at the script's top)
-
     cuml_vocab_load_path = Path("data/vocabulary_dumps/1_word/global_vocabulary_processed_bigram_100_min_df_cuml_from_sklearn.parquet")
 
     if not cuml_vocab_load_path.exists():
@@ -708,7 +705,7 @@ if __name__ == "__main__":
                 continue
 
             df_detailed_metrics['auc'] = pd.to_numeric(df_detailed_metrics['auc'], errors='coerce')
-            df_avg_metrics = df_detailed_metrics.groupby('year')[['accuracy', 'f1_score', 'auc']].mean(numeric_only=True).reset_index()
+            df_avg_metrics = df_detailed_metrics.groupby('year')[['accuracy', 'f1_score', 'auc','best param']].mean(numeric_only=True).reset_index()
 
             if df_avg_metrics.empty:
                 print(f"Warning: No data to average for {model_type_to_plot.upper()}. Skipping plotting.")
