@@ -72,13 +72,13 @@ with open(CROSS_PERIOD_LOG_PATH, "w") as f:
 
 # --- Helper Functions ---
 def load_optimal_hyperparameters():
-    """Load optimal hyperparameters from CSV file"""
+    """Load optimal hyperparameters from CSV file with individual parameter columns"""
     try:
         if not Path(OPTIMAL_PARAMS_CSV_PATH).exists():
             print(f"ERROR: Optimal parameters file not found at {OPTIMAL_PARAMS_CSV_PATH}")
             return None
         
-        # Read CSV with explicit column specification
+        # Read CSV - should now have individual parameter columns
         df = pd.read_csv(OPTIMAL_PARAMS_CSV_PATH)
         print(f"Loaded optimal hyperparameters from {OPTIMAL_PARAMS_CSV_PATH}")
         print(f"CSV columns: {list(df.columns)}")
@@ -86,11 +86,13 @@ def load_optimal_hyperparameters():
         print("First few rows:")
         print(df.head())
         
-        # Ensure we have the right columns
-        expected_columns = ['seed', 'year', 'accuracy', 'f1_score', 'auc', 'best param']
-        if not all(col in df.columns for col in expected_columns):
-            print(f"ERROR: Missing expected columns. Found: {list(df.columns)}")
-            print(f"Expected: {expected_columns}")
+        # Expected columns: seed, year, accuracy, f1_score, auc, model_C, tfidf_norm
+        required_columns = ['seed', 'year', 'model_C', 'tfidf_norm']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        
+        if missing_columns:
+            print(f"ERROR: Missing required columns: {missing_columns}")
+            print(f"Available columns: {list(df.columns)}")
             return None
         
         # Create a dictionary for quick lookup: (seed, year) -> best_params
@@ -98,22 +100,17 @@ def load_optimal_hyperparameters():
         
         for idx, row in df.iterrows():
             try:
-                # Explicitly use column names
                 seed = int(row['seed'])
-                year = str(int(row['year'])).zfill(3)  # Convert to int first, then to string
-                best_params_str = row['best param']
+                year = str(int(row['year'])).zfill(3)  # Convert to 3-digit format
                 
-                # Skip if best_params is NaN or empty
-                if pd.isna(best_params_str) or best_params_str == '':
-                    print(f"Warning: Empty best_params for seed {seed}, year {year}")
-                    continue
+                # Extract parameters directly from columns
+                optimal_params = {
+                    'svm_C': float(row['model_C']),
+                    'tfidf_norm': str(row['tfidf_norm'])
+                }
                 
-                # Parse the best_params string
-                import ast
-                best_params = ast.literal_eval(str(best_params_str))
-                params_dict[(seed, year)] = best_params
-                
-                print(f"Loaded params for seed {seed}, year {year}: {best_params}")
+                params_dict[(seed, year)] = optimal_params
+                print(f"Loaded params for seed {seed}, year {year}: {optimal_params}")
                 
             except Exception as e:
                 print(f"Warning: Could not parse row {idx}: {e}")
@@ -142,36 +139,10 @@ def get_hyperparameters_for_seed_year(params_dict, seed, year):
             'svm_C': 1.0
         }
     
-    best_params = params_dict[key]
-    
-    # Extract parameters from the nested dictionary structure
-    extracted_params = {}
-    
-    # Extract TF-IDF parameters
-    if 'tfidf__use_idf' in best_params:
-        extracted_params['tfidf_use_idf'] = best_params['tfidf__use_idf']
-    elif 'tfidf_use_idf' in best_params:
-        extracted_params['tfidf_use_idf'] = best_params['tfidf_use_idf']
-    else:
-        extracted_params['tfidf_use_idf'] = True
-    
-    if 'tfidf__norm' in best_params:
-        extracted_params['tfidf_norm'] = best_params['tfidf__norm']
-    elif 'tfidf_norm' in best_params:
-        extracted_params['tfidf_norm'] = best_params['tfidf_norm']
-    else:
-        extracted_params['tfidf_norm'] = 'l2'
-    
-    # Extract SVM parameters
-    if 'model__C' in best_params:
-        extracted_params['svm_C'] = best_params['model__C']
-    elif 'svm_C' in best_params:
-        extracted_params['svm_C'] = best_params['svm_C']
-    else:
-        extracted_params['svm_C'] = 1.0
-    
-    print(f"Using parameters for seed {seed}, year {year}: {extracted_params}")
-    return extracted_params
+    optimal_params = params_dict[key]
+    print(f"Using parameters for seed {seed}, year {year}: {optimal_params}")
+    return optimal_params
+
 def set_all_seeds(seed_value):
     """Set random seeds for reproducibility"""
     random.seed(seed_value)

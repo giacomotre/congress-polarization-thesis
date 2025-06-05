@@ -314,19 +314,6 @@ def run_model_pipeline(
     final_train_time = time.time() - start_time_final_train
     print(f"Final model training complete in {final_train_time:.2f} seconds.")
 
-    """print(f"Saving the final TF-IDF and {model_type.upper()} model...")
-    model_dir_path = Path("models")
-    model_dir_path.mkdir(parents=True, exist_ok=True)
-    tfidf_filename = model_dir_path / f"tfidf_{model_type}_{congress_year}_seed{random_state}_vectorizer.joblib"
-    model_filename = model_dir_path / f"tfidf_{model_type}_{congress_year}_seed{random_state}_model.joblib"
-    try:
-        joblib.dump(final_tfidf_vectorizer, tfidf_filename)
-        joblib.dump(final_model_instance, model_filename)
-        print(f"Final TF-IDF saved to {tfidf_filename}")
-        print(f"Final Model saved to {model_filename}")
-    except Exception as e:
-        print(f"Error saving the final components: {e}")"""
-
     print("Preparing test data for evaluation...")
     if X_test_pd.empty:
         print("Error: Test data (X_test_pd) is empty.")

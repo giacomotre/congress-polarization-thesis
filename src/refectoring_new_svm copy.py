@@ -25,6 +25,7 @@ from plotting_utils import plot_performance_metrics
 
 from dataclasses import dataclass
 from typing import Dict, List, Any, Optional
+import csv
 
 # ------ Loading Unified Config -------
 @dataclass
@@ -80,46 +81,135 @@ class ExperimentConfig:
     def get_model_config(self, model_name: str) -> Dict[str, Any]:
         return self._raw_config.get(model_name, {})
 
-#define outputs path 
-os.makedirs("logs", exist_ok=True)
-
-detailed_log_paths = {
-    'svm': "logs/tfidf_svm_performance_detailed.csv",
-}
-
-model_plotting_info = {
-    'svm': {"avg_log_path": detailed_log_paths['svm'].replace("_detailed.csv", "_avg.csv"), "output_dir": "plots/svm"},
-}
-
-timing_log_paths = {
-    'svm': "logs/svm_timing_log.csv",
-}
-
-# detail csv file header
-detailed_csv_header_columns = ["seed", "year", "accuracy", "f1_score", "auc"]
-detailed_csv_header = ",".join(detailed_csv_header_columns) + "\n"
-
-for model_type, log_path in detailed_log_paths.items():
-    if os.path.exists(log_path):
-        os.remove(log_path)
-        print(f"Deleted existing detailed log file: {log_path}")
-    with open(log_path, "w") as f:
-        f.write(detailed_csv_header)
-
-#timing csv header
-timing_csv_header_columns = [
-    "seed", "year",
-    "timing_tuning_sec", "timing_final_train_sec",
-    "timing_evaluation_sec", "timing_total_pipeline_sec"
-]
-timing_csv_header = ",".join(timing_csv_header_columns) + "\n"
-
-for model_type, log_path in timing_log_paths.items(): # Using your globally defined timing_log_paths
-    if os.path.exists(log_path):
-        os.remove(log_path)
-        print(f"Deleted existing timing log file: {log_path}")
-    with open(log_path, "w") as f:
-        f.write(timing_csv_header)
+@dataclass
+class ResultsManager:
+    """Gestisce tutto il logging e salvataggio dei risultati degli esperimenti."""
+    base_log_dir: str = "logs"
+    base_plot_dir: str = "plots"
+    
+    def __post_init__(self):
+        """Chiamato automaticamente dopo __init__. Inizializza le directory."""
+        self._create_directories()
+        self._initialize_log_files()
+    
+    def _create_directories(self):
+        """Crea le directory necessarie se non esistono"""
+        os.makedirs(self.base_log_dir, exist_ok=True)
+        os.makedirs(self.base_plot_dir, exist_ok=True)
+        print(f"✅ Created directories: {self.base_log_dir}, {self.base_plot_dir}")
+    
+    def get_detailed_log_path(self, model_type: str) -> str:
+        """Ottieni il path del file di log dettagliato per un modello"""
+        return f"{self.base_log_dir}/tfidf_{model_type}_performance_detailed.csv"
+    
+    def get_avg_log_path(self, model_type: str) -> str:
+        """Ottieni il path del file di log delle medie per un modello"""
+        detailed_path = self.get_detailed_log_path(model_type)
+        return detailed_path.replace("_detailed.csv", "_avg.csv")
+    
+    def get_timing_log_path(self, model_type: str) -> str:
+        """Ottieni il path del file di log dei tempi per un modello"""
+        return f"{self.base_log_dir}/{model_type}_timing_log.csv"
+    
+    def get_plot_output_dir(self, model_type: str) -> str:
+        """Ottieni la directory per i plot di un modello"""
+        return f"{self.base_plot_dir}/{model_type}"
+    
+    def get_model_plotting_info(self, model_type: str) -> Dict[str, str]:
+        """Ottieni le informazioni per il plotting di un modello."""
+        return {
+            "avg_log_path": self.get_avg_log_path(model_type),
+            "output_dir": self.get_plot_output_dir(model_type)
+        }
+    
+    def _get_detailed_csv_header(self) -> List[str]:
+        """Definisce le colonne del CSV dettagliato"""
+        return ["seed", "year", "accuracy", "f1_score", "auc", "model_C", "tfidf_norm"]
+    
+    def _get_timing_csv_header(self) -> List[str]:
+        """Definisce le colonne del CSV dei tempi"""
+        return [
+            "seed", "year",
+            "timing_tuning_sec", "timing_final_train_sec", 
+            "timing_evaluation_sec", "timing_total_pipeline_sec"
+        ]
+    
+    def _initialize_log_files(self):
+        """Inizializza i file CSV con gli header."""
+        models = ['svm']  # Puoi espandere questa lista
+        
+        for model_type in models:
+            # Inizializza file dettagliato
+            detailed_path = self.get_detailed_log_path(model_type)
+            self._initialize_csv_file(
+                detailed_path, 
+                self._get_detailed_csv_header(),
+                "detailed log"
+            )
+            
+            # Inizializza file timing
+            timing_path = self.get_timing_log_path(model_type)
+            self._initialize_csv_file(
+                timing_path,
+                self._get_timing_csv_header(), 
+                "timing log"
+            )
+            
+            # Crea directory plot
+            plot_dir = self.get_plot_output_dir(model_type)
+            os.makedirs(plot_dir, exist_ok=True)
+    
+    def _initialize_csv_file(self, file_path: str, header_columns: List[str], file_type: str):
+        """Inizializza un singolo file CSV con header."""
+        # Rimuovi file esistente se presente
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            print(f"🗑️  Deleted existing {file_type} file: {file_path}")
+        
+        # Crea nuovo file con header
+        header_line = ",".join(header_columns) + "\n"
+        with open(file_path, "w") as f:
+            f.write(header_line)
+        print(f"📝 Initialized {file_type} file: {file_path}")
+    
+    def save_experiment_result(self, result_json: Dict[str, Any], model_type: str):
+        """Salva i risultati di un esperimento nel file CSV dettagliato."""
+        detailed_log_path = self.get_detailed_log_path(model_type)
+        
+        try:
+            # Estrai parametri dai best_params
+            best_params = result_json.get('best_params', {})
+            model_C = self._extract_parameter(best_params, ['model__C', 'svm_C'], default=1.0)
+            tfidf_norm = self._extract_parameter(best_params, ['tfidf__norm', 'tfidf_norm'], default='l2')
+            
+            # Prepara la riga da scrivere
+            row_data = [
+                result_json['seed'],
+                result_json['year'], 
+                result_json['accuracy'],
+                result_json['f1_score'],
+                result_json['auc'],
+                model_C,
+                tfidf_norm
+            ]
+            
+            # Scrivi nel CSV
+            with open(detailed_log_path, "a", newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(row_data)
+            
+            print(f"💾 Saved result for {model_type} - Year: {result_json['year']}, Seed: {result_json['seed']}")
+            
+        except Exception as e:
+            print(f"❌ Error saving result to {detailed_log_path}: {e}")
+            raise
+    
+    def _extract_parameter(self, params_dict: Dict, possible_keys: List[str], default: Any) -> Any:
+        """Estrae un parametro da un dizionario provando multiple chiavi."""
+        for key in possible_keys:
+            if key in params_dict:
+                return params_dict[key]
+        return default
 
 # --- Define model function ---
 def run_model_pipeline(
@@ -129,13 +219,15 @@ def run_model_pipeline(
     y_val_encoded_pd: pd.Series,
     X_test_pd: pd.Series, 
     y_test_encoded_pd: pd.Series,
-    config: 'ExperimentConfig',  # L'oggetto config completo
-    model_type: str,  # Mancava! (es: 'svm')
-    model_config: Dict[str, Any],  # Mancava! (es: svm_config)
-    random_state: int,  # Mancava!
-    congress_year: str,  # Mancava!
+    config: 'ExperimentConfig',  
+    model_type: str,  
+    model_config: Dict[str, Any],  
+    random_state: int,  
+    congress_year: str,  
     model_plot_output_dir: str,
-    fixed_vocabulary_dict: Dict[str, int]
+    fixed_vocabulary_dict: Dict[str, int],
+    results_manager: 'ResultsManager',
+    congress_feature_importance: Dict[str, Dict[str, float]]
 ) -> Optional[Dict[str, Any]]:
     
     print(f"\n --- Running {model_type.upper()} pipeline [Fixed Vocabulary] for Congress {congress_year} with seed {random_state} ---")
@@ -287,19 +379,6 @@ def run_model_pipeline(
     final_train_time = time.time() - start_time_final_train
     print(f"Final model training complete in {final_train_time:.2f} seconds.")
 
-    """print(f"Saving the final TF-IDF and {model_type.upper()} model...")
-    model_dir_path = Path("models")
-    model_dir_path.mkdir(parents=True, exist_ok=True)
-    tfidf_filename = model_dir_path / f"tfidf_{model_type}_{congress_year}_seed{random_state}_vectorizer.joblib"
-    model_filename = model_dir_path / f"tfidf_{model_type}_{congress_year}_seed{random_state}_model.joblib"
-    try:
-        joblib.dump(final_tfidf_vectorizer, tfidf_filename)
-        joblib.dump(final_model_instance, model_filename)
-        print(f"Final TF-IDF saved to {tfidf_filename}")
-        print(f"Final Model saved to {model_filename}")
-    except Exception as e:
-        print(f"Error saving the final components: {e}")"""
-
     print("Preparing test data for evaluation...")
     if X_test_pd.empty:
         print("Error: Test data (X_test_pd) is empty.")
@@ -332,7 +411,7 @@ def run_model_pipeline(
 
     # --- Calculate target_names_eval (Moved Earlier) ---
     try:
-        reverse_party_map_eval = {v: k for k, v in party_map.items()}
+        reverse_party_map_eval = {v: k for k, v in config.party_map.items()}
         unique_labels_in_test_cpu_eval = sorted(list(np.unique(y_test_encoded_pd))) # Use y_test_encoded_pd directly
         target_names_eval = [reverse_party_map_eval.get(i, str(i)) for i in unique_labels_in_test_cpu_eval]
     except Exception as e:
@@ -435,26 +514,7 @@ def run_model_pipeline(
         }
     }
     
-    current_timing_log_path = timing_log_paths[model_type]
-    with open(current_timing_log_path, "a") as f:
-        f.write(
-            f"{result_json['seed']},"
-            f"{result_json['year']},"
-            f"{result_json['timing']['tuning_sec']},"
-            f"{result_json['timing']['final_train_sec']},"
-            f"{result_json['timing']['evaluation_sec']},"
-            f"{result_json['timing']['total_pipeline_sec']}\n"
-        )
-    
-    current_detailed_log_path = detailed_log_paths[model_type]
-    with open(current_detailed_log_path, "a") as f:
-        f.write(
-            f"{result_json['seed']},"       # Assuming seed and year are not problematic
-            f"{result_json['year']},"
-            f"{result_json['accuracy']},"
-            f"{result_json['f1_score']},"
-            f"{result_json['auc']}\n" 
-        )
+    results_manager.save_experiment_result(result_json, model_type)
 
     # Cleanup remaining major variables from this pipeline run
     if 'X_train_val_combined_pd' in locals(): del X_train_val_combined_pd
@@ -494,16 +554,20 @@ if __name__ == "__main__":
     # NEW: Load configuration using the class
     config_path = Path(__file__).resolve().parent.parent / "config" / "config.yaml"
     config = ExperimentConfig.from_config_file(config_path)
+    
+    results_manager = ResultsManager()
+    print("✅ Results manager initialized")
+    
     # Test: stampa la configurazione SVM
     svm_config = config.get_model_config('svm')
     print(f"SVM config: {svm_config}")
     
-    # NEW: Extract model config (you'll need to pass this or load it separately)
-    # For now, you can load the unified_config again or restructure this part
     model_configs = {
         'svm': config.get_model_config('svm'),
     }
     
+    congress_feature_importance = {}
+
     # --- load fixed vocabulary ---
     sklearn_vocab_load_path = Path("data/vocabulary_dumps/1_word/global_vocabulary_processed_bigram_100_min_df_sklearn_from_sklearn.joblib") # Adjust if your path is different
 
@@ -519,7 +583,7 @@ if __name__ == "__main__":
     
     congress_years_to_process = config.get_congress_years()
     models_to_run = ['svm'] 
-    congress_feature_importance = {}
+    
     
     for seed in config.seeds:
         print(f"\n--- Starting runs for seed: {seed} ---")
@@ -621,8 +685,8 @@ if __name__ == "__main__":
                     if current_model_config is None:
                         print(f"Warning: Config for model '{model_type_to_run}' not found. Skipping.")
                         continue
-
-                    current_model_plot_dir = model_plotting_info[model_type_to_run]["output_dir"]
+                    
+                    current_model_plot_dir = results_manager.get_plot_output_dir(model_type_to_run)
                     Path(current_model_plot_dir).mkdir(parents=True, exist_ok=True)
 
                     run_model_pipeline(
@@ -635,7 +699,9 @@ if __name__ == "__main__":
                         random_state=seed,
                         congress_year=year_str,
                         model_plot_output_dir=current_model_plot_dir,
-                        fixed_vocabulary_dict=fixed_sklearn_vocabulary
+                        fixed_vocabulary_dict=fixed_sklearn_vocabulary,
+                        results_manager=results_manager,
+                        congress_feature_importance=congress_feature_importance
                     )
             except Exception as e:
                 print(f"❌ An error occurred during processing for Congress {year_str} with seed {seed}: {e}")
@@ -647,20 +713,20 @@ if __name__ == "__main__":
                 if 'train_df' in locals(): del train_df
                 if 'val_df' in locals(): del val_df
                 if 'test_df' in locals(): del test_df
-
+                
     print("\n--- Calculating and plotting averaged results ---")
     for model_type_to_plot in models_to_run:
-        plot_info = model_plotting_info.get(model_type_to_plot)
-        if plot_info is None:
-            print(f"Warning: Plotting info for model '{model_type_to_plot}' not found. Skipping.")
-            continue
-
-        detailed_log_for_avg = detailed_log_paths[model_type_to_plot]
+        # ✅ NUOVO: Usa ResultsManager invece delle variabili globali
+        plot_info = results_manager.get_model_plotting_info(model_type_to_plot)
+        detailed_log_for_avg = results_manager.get_detailed_log_path(model_type_to_plot)
         avg_log_path_for_plot = plot_info["avg_log_path"]
         output_dir_for_plot = plot_info["output_dir"]
+        
+        # ✅ ASSICURATI che la directory esista
         Path(output_dir_for_plot).mkdir(parents=True, exist_ok=True)
 
         try:
+            # ✅ Usa la variabile corretta detailed_log_for_avg (che ora viene da ResultsManager)
             if not Path(detailed_log_for_avg).exists() or Path(detailed_log_for_avg).stat().st_size == 0:
                 print(f"Error: Detailed log empty/not found for {model_type_to_plot.upper()} at {detailed_log_for_avg}.")
                 continue
