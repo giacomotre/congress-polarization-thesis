@@ -134,7 +134,6 @@ def get_hyperparameters_for_seed_year(params_dict, seed, year):
         print(f"Warning: No optimal parameters found for seed {seed}, year {year}. Using defaults.")
         # Return reasonable defaults
         return {
-            'tfidf_use_idf': True,
             'tfidf_norm': 'l2',
             'svm_C': 1.0
         }
@@ -215,7 +214,6 @@ def train_model_on_congress(train_data, fixed_vocabulary_dict, random_state, opt
         ngram_range=(1, 2),  # Matching your baseline
         lowercase=False,
         stop_words=None,
-        use_idf=optimal_params['tfidf_use_idf'],
         norm=optimal_params['tfidf_norm']
     )
     
@@ -232,7 +230,7 @@ def train_model_on_congress(train_data, fixed_vocabulary_dict, random_state, opt
     svm_model.fit(X_train_tfidf, y_train_encoded)
     
     print(f"Model trained successfully on {len(X_train_encoded)} samples")
-    print(f"Using parameters: C={optimal_params['svm_C']}, use_idf={optimal_params['tfidf_use_idf']}, norm='{optimal_params['tfidf_norm']}'")
+    print(f"Using parameters: C={optimal_params['svm_C']}, norm='{optimal_params['tfidf_norm']}'")
     return svm_model, tfidf_vectorizer
 
 def evaluate_on_test_congress(model, vectorizer, test_data, training_speaker_ids, random_state):
