@@ -1,36 +1,27 @@
-# cross_year_evaluation.py (Modified for comprehensive testing with manual CV and cuDF/CuPy)
-
 import os
 import pandas as pd
 import joblib
-import nltk # Keep if needed by pipeline_utils
 import json
 import time
 import numpy as np
+import random
 from pathlib import Path
-# from collections import Counter # Not used in updated all_models.py
 
-# Import RAPIDS components
-import cudf
-import cupy
-
-# Import necessary components from sklearn and cuml
-from sklearn.pipeline import Pipeline # Keep Pipeline as a concept/container, even if saving components separately
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, confusion_matrix, classification_report
-# Use KFold and ParameterGrid for manual tuning
-from sklearn.model_selection import KFold, ParameterGrid
-from cuml.feature_extraction.text import TfidfVectorizer
-from cuml.naive_bayes import ComplementNB
-from cuml.svm import LinearSVC
-from cuml.linear_model import LogisticRegression
+from sklearn.svm import LinearSVC
+from sklearn.feature_extraction.text import TfidfVectorizer 
+
+from sklearn.metrics import accuracy_score 
+from sklearn.metrics import confusion_matrix 
+from sklearn.metrics import roc_auc_score 
+from sklearn.metrics import f1_score as sklearn_f1_score
+from sklearn.metrics import classification_report
 
 # Import utility functions
 from config_loader import load_config
-from pipeline_utils import encode_labels_with_map, clean_text_for_tfidf # Assuming load_pipeline is or will be in pipeline_utils if you use it
+from pipeline_utils import encode_labels_with_map
 
 # ------ Loading Unified Config -------
-# Adjust the path as needed based on your project structure
 CONFIG_PATH_UNIFIED = Path(__file__).resolve().parent.parent / "config" / "config.yaml"
 
 try:
@@ -38,526 +29,453 @@ try:
     print("Loaded unified config:", json.dumps(unified_config, indent=4))
 except FileNotFoundError:
     print(f"Error: Unified config file not found at {CONFIG_PATH_UNIFIED}. Please create it.")
-    exit() # Exit if config file is missing
+    exit()
 
 # --- Extract Common Parameters ---
 common_params = unified_config.get('common', {})
 split_params = common_params.get('split_params', {})
-# Use TEST_SIZE and VALIDATION_SIZE for the within-year split *for tuning*
-TEST_SIZE = split_params.get('test_size', 0.15)
-VALIDATION_SIZE = split_params.get('validation_size', 0.25)
+TEST_SIZE = 0.15  # Fixed 15% as per requirements
 DEFAULT_RANDOM_STATE = split_params.get('random_state', 42)
-SEEDS = split_params.get('seeds', [DEFAULT_RANDOM_STATE])
+
+# Define the 3 seeds for cross-period evaluation
+DEFAULT_RANDOM_STATE = split_params.get('random_state', 42)
+CROSS_PERIOD_SEEDS = split_params.get('seeds', [DEFAULT_RANDOM_STATE])
+#CROSS_PERIOD_SEEDS = [42, 123, 456]  # You can modify these as needed -> proposed by claude
 
 data_params = common_params.get('data_params', {})
-CONGRESS_YEAR_START = data_params.get('congress_year_start', 75)
-CONGRESS_YEAR_END = data_params.get('congress_year_end', 112) # Include END year for testing
+CONGRESS_YEAR_START = data_params.get('congress_year_start', 76)
+CONGRESS_YEAR_END = data_params.get('congress_year_end', 112)
 
 PARTY_MAP = common_params.get('party_map', {})
-
 if not PARTY_MAP or not all(party in PARTY_MAP for party in ['D', 'R']):
-     print("Warning: PARTY_MAP in config is missing or incomplete. Ensure D and R are mapped.")
+    print("Warning: PARTY_MAP in config is missing or incomplete. Ensure D and R are mapped.")
 
-# Define detailed log path for comprehensive cross-year evaluation
-COMPREHENSIVE_CROSS_YEAR_LOG_PATH = "logs/tfidf_comprehensive_cross_year_performance_detailed.csv"
+# --- Define Model Configuration ---
+model_config = unified_config.get('svm', {})
+DEFAULT_MAX_ITER = model_config.get('max_iter', 5000)
 
-# Define directory for saving trained TF-IDF vectorizers and models
-MODEL_DIR_PATH = Path("models")
-MODEL_DIR_PATH.mkdir(parents=True, exist_ok=True) # Ensure models directory exists
+# Path to optimal hyperparameters CSV file
+OPTIMAL_PARAMS_CSV_PATH = "logs/tfidf_svm_performance_detailed.csv"  # Adjust path as needed
 
-# Remove existing log file to start fresh and write header
-if os.path.exists(COMPREHENSIVE_CROSS_YEAR_LOG_PATH):
-    os.remove(COMPREHENSIVE_CROSS_YEAR_LOG_PATH)
-    print(f"Deleted existing comprehensive cross-year detailed log file: {COMPREHENSIVE_CROSS_YEAR_LOG_PATH}")
-with open(COMPREHENSIVE_CROSS_YEAR_LOG_PATH, "w") as f:
-    f.write("seed,train_year,test_year,accuracy,f1_score,auc\n")
+# --- Setup Logging ---
+os.makedirs("logs", exist_ok=True)
+CROSS_PERIOD_LOG_PATH = "logs/cross_period_evaluation_results.csv"
 
+# CSV header for cross-period results
+cross_period_header = "seed,train_year,test_year,accuracy,f1_score,auc\n"
 
-# --- Define Model Configurations Dictionary ---
-model_configs = {
-    'bayes': unified_config.get('bayes', {}),
-    'svm': unified_config.get('svm', {}),
-    'lr': unified_config.get('logistic_regression', {})
-}
+# Initialize log file
+if os.path.exists(CROSS_PERIOD_LOG_PATH):
+    os.remove(CROSS_PERIOD_LOG_PATH)
+    print(f"Deleted existing cross-period log file: {CROSS_PERIOD_LOG_PATH}")
 
-# Function to train a model (TF-IDF and Model) for a specific year using manual CV
-def train_model_for_year(train_year: str, model_type: str, model_config: dict, random_state: int, party_map: dict):
-    """
-    Loads data for train_year, performs manual CV tuning, trains the final
-    TF-IDF and model with best params, saves them, and returns the trained objects.
-    """
-    print(f"\n --- Training {model_type.upper()} model for year {train_year} with seed {random_state} ---")
-    start_time_total = time.time()
+with open(CROSS_PERIOD_LOG_PATH, "w") as f:
+    f.write(cross_period_header)
 
-    # --- Data Loading (Train Year) ---
-    train_input_path = f"data/merged/house_db/house_merged_{train_year}.csv"
-    if not os.path.exists(train_input_path):
-        print(f"⚠️  Skipping training for {train_year} (seed {random_state}): CSV file not found at {train_input_path}.")
-        return None, None # Return None for both TF-IDF and Model
-
-    print(f"Loading training data for year {train_year}...")
-    train_df_full = pd.read_csv(train_input_path)
-    print("Training data loaded.")
-
-    if train_df_full.empty or not all(col in train_df_full.columns for col in ['speech', 'party', 'speakerid']):
-         print(f"⚠️  Skipping training for {train_year} (seed {random_state}): Data empty or missing required columns.")
-         return None, None
-    train_df_full.dropna(subset=['speech', 'party', 'speakerid'], inplace=True)
-    if train_df_full.empty:
-        print(f"⚠️  Skipping training for {train_year} (seed {random_state}): Data empty after NaNs drop.")
-        return None, None
-
-
-    # --- Data Splitting (Train Year - for Tuning - Leave-out Speaker) ---
-    print(f"Performing within-year split for tuning on {train_year} data...")
-    unique_train_speakers = train_df_full['speakerid'].unique()
-
-    if len(unique_train_speakers) < 2:
-        print(f"⚠️  Skipping training for {train_year} (seed {random_state}): Not enough unique speakers ({len(unique_train_speakers)}) for split.")
-        return None, None
-
-    # Adjust test_size if number of speakers is very small
-    current_test_size = TEST_SIZE if len(unique_train_speakers) * TEST_SIZE >= 1 else 1/len(unique_train_speakers)
-
-    train_val_speaker, _ = train_test_split( # We only need train/val speakers for tuning
-        unique_train_speakers,
-        test_size=current_test_size, # Proportion for the temporary 'test' part of this split
-        random_state=random_state
-    )
-
-    if len(train_val_speaker) < 2:
-         print(f"⚠️  Skipping training for {train_year} (seed {random_state}): Not enough train/val speakers ({len(train_val_speaker)}) for further split.")
-         return None, None
-
-    # Adjust validation_size based on remaining data
-    current_validation_size = VALIDATION_SIZE / (1 - TEST_SIZE) if (1 - TEST_SIZE) > 0 else VALIDATION_SIZE
-    current_validation_size = current_validation_size if len(train_val_speaker) * current_validation_size >= 1 else 1/len(train_val_speaker)
-
-
-    train_speaker_tune, val_speaker_tune = train_test_split(
-        train_val_speaker,
-        test_size=current_validation_size,
-        random_state=random_state
-    )
-
-    train_df_tune = train_df_full[train_df_full["speakerid"].isin(train_speaker_tune)].reset_index(drop=True)
-    val_df_tune = train_df_full[train_df_full["speakerid"].isin(val_speaker_tune)].reset_index(drop=True)
-
-
-    X_train_tune_pd = train_df_tune["speech"]
-    y_train_tune_pd = train_df_tune["party"]
-    X_val_tune_pd = val_df_tune["speech"]
-    y_val_tune_pd = val_df_tune["party"]
-
-
-    # --- Encoding (Train Year - for Tuning) ---
-    print("Encoding labels for tuning data...")
-    train_data_to_encode_tune = pd.DataFrame({'party': y_train_tune_pd, 'speech': X_train_tune_pd})
-    train_encoded_df_tune = encode_labels_with_map(train_data_to_encode_tune, party_map)
-    X_train_tune_pd_aligned = train_encoded_df_tune['speech'].reset_index(drop=True)
-    y_train_encoded_pd_aligned_tune = train_encoded_df_tune['label'].reset_index(drop=True)
-
-    val_data_to_encode_tune = pd.DataFrame({'party': y_val_tune_pd, 'speech': X_val_tune_pd})
-    val_encoded_df_tune = encode_labels_with_map(val_data_to_encode_tune, party_map)
-    X_val_tune_pd_aligned = val_encoded_df_tune['speech'].reset_index(drop=True)
-    y_val_encoded_pd_aligned_tune = val_encoded_df_tune['label'].reset_index(drop=True)
-
-    # Combine ALIGNED train + val for manual CV
-    X_train_val_combined_pd_aligned = pd.concat([X_train_tune_pd_aligned, X_val_tune_pd_aligned], ignore_index=True)
-    y_train_val_encoded_pd_aligned_tune = pd.concat([y_train_encoded_pd_aligned_tune, y_val_encoded_pd_aligned_tune], ignore_index=True)
-
-
-    if X_train_val_combined_pd_aligned.empty or y_train_val_encoded_pd_aligned_tune.empty:
-         print(f"⚠️  Skipping training for {train_year} (seed {random_state}): Combined train/validation data is empty after encoding.")
-         return None, None
-    if len(np.unique(y_train_val_encoded_pd_aligned_tune)) < 2:
-         print(f"⚠️  Skipping training for {train_year} (seed {random_state}): Fewer than 2 unique classes in training labels for tuning.")
-         return None, None
-
-    # --- Manual Cross-Validation Loop for Tuning ---
-    n_splits = 5 # Or get from config
-    kf = KFold(n_splits=n_splits, shuffle=True, random_state=random_state)
-    best_score = -1
-    best_params = None
-    # results = [] # To store results for each param combination if needed
-
-    print(f"Starting manual {n_splits}-fold cross-validation for hyperparameter tuning on {train_year} data...")
-    start_time_tuning = time.time()
-
-    # Define Hyperparameter Grid (using model_config, same as updated all_models.py)
-    param_combinations = {
-        'tfidf__max_features': model_config.get("tfidf_max_features_grid", [10000]),
-        'tfidf__ngram_range': [tuple(nr) for nr in model_config.get("ngram_range_grid", [[1, 2]])],
-    }
-    model_specific_grid = {}
-    if model_type == 'lr':
-        model_specific_grid['model__C'] = model_config.get('lr_C_grid', [1.0])
-    # Add other model params here ('model__param_name')
-
-    param_combinations.update(model_specific_grid)
-    grid = ParameterGrid(param_combinations)
-
-
-    for params in grid:
-        # print(f"  Testing params: {params}")
-        fold_scores = []
-
-        # Extract params for TF-IDF and Model
-        tfidf_params = {k.split('__')[1]: v for k, v in params.items() if k.startswith('tfidf__')}
-        model_params = {k.split('__')[1]: v for k, v in params.items() if k.startswith('model__')}
-
-        fold_num = 0
-        # Use the combined train/val data for the KFold split
-        for train_idx, val_idx in kf.split(X_train_val_combined_pd_aligned, y_train_val_encoded_pd_aligned_tune):
-            fold_num += 1
-            # print(f"    Fold {fold_num}/{n_splits}")
-
-            # Get pandas folds for this iteration
-            X_train_fold_pd = X_train_val_combined_pd_aligned.iloc[train_idx]
-            y_train_fold_pd = y_train_val_encoded_pd_aligned_tune.iloc[train_idx]
-            X_val_fold_pd = X_train_val_combined_pd_aligned.iloc[val_idx]
-            y_val_fold_pd = y_train_val_encoded_pd_aligned_tune.iloc[val_idx]
-
+# --- Helper Functions ---
+def load_optimal_hyperparameters():
+    """Load optimal hyperparameters from CSV file"""
+    try:
+        if not Path(OPTIMAL_PARAMS_CSV_PATH).exists():
+            print(f"ERROR: Optimal parameters file not found at {OPTIMAL_PARAMS_CSV_PATH}")
+            return None
+        
+        df = pd.read_csv(OPTIMAL_PARAMS_CSV_PATH)
+        print(f"Loaded optimal hyperparameters from {OPTIMAL_PARAMS_CSV_PATH}")
+        
+        # Create a dictionary for quick lookup: (seed, year) -> best_params
+        params_dict = {}
+        
+        for _, row in df.iterrows():
+            seed = int(row['seed'])
+            year = str(row['year']).zfill(3)  # Ensure 3-digit format
+            
+            # Parse the best_params string (it's stored as a string representation of dict)
             try:
-                # Clean text data for the folds
-                X_train_fold_cleaned = X_train_fold_pd.apply(clean_text_for_tfidf)
-                X_val_fold_cleaned = X_val_fold_pd.apply(clean_text_for_tfidf)
+                best_params_str = row['best_params'] if 'best_params' in row else row['best param']
+                # Handle the string representation of dictionary
+                import ast
+                best_params = ast.literal_eval(best_params_str)
+                params_dict[(seed, year)] = best_params
+                
+            except Exception as e:
+                print(f"Warning: Could not parse best_params for seed {seed}, year {year}: {e}")
+                continue
+        
+        print(f"Successfully loaded parameters for {len(params_dict)} seed-year combinations")
+        return params_dict
+        
+    except Exception as e:
+        print(f"ERROR loading optimal hyperparameters: {e}")
+        return None
 
-                # Convert folds to GPU data (cuDF for X, CuPy for y is preferred by cuML models)
-                X_train_fold_cudf = cudf.Series(X_train_fold_cleaned)
-                y_train_fold_cupy = cupy.asarray(y_train_fold_pd.to_numpy(dtype=np.int32)) # Target as CuPy array
-                X_val_fold_cudf = cudf.Series(X_val_fold_cleaned)
-                y_val_fold_cupy = cupy.asarray(y_val_fold_pd.to_numpy(dtype=np.int32)) # Target as CuPy array
-
-
-                # Instantiate cuML components with current params
-                tfidf_vectorizer = TfidfVectorizer(**tfidf_params) # Pass extracted tfidf params
-
-                if model_type == 'bayes':
-                    model = ComplementNB(**model_params)
-                elif model_type == 'svm':
-                    model = LinearSVC(**model_params)
-                elif model_type == 'lr':
-                    model = LogisticRegression(penalty='l2', **model_params)
-                else:
-                    raise ValueError(f"Unknown model type: {model_type}")
-
-                # Fit TF-IDF and transform
-                X_train_tfidf = tfidf_vectorizer.fit_transform(X_train_fold_cudf)
-                X_val_tfidf = tfidf_vectorizer.transform(X_val_fold_cudf)
-
-                # Fit Model
-                model.fit(X_train_tfidf, y_train_fold_cupy)
-
-                # Predict on validation fold
-                y_pred_val_gpu = model.predict(X_val_tfidf)
-
-                # Evaluate (convert predictions and true labels to CPU/NumPy for sklearn metric)
-                y_pred_val_cpu = cupy.asnumpy(y_pred_val_gpu)
-                y_val_fold_cpu = cupy.asnumpy(y_val_fold_cupy)
-                score = accuracy_score(y_val_fold_cpu, y_pred_val_cpu)
-                fold_scores.append(score)
-
-                # Clean up GPU memory explicitly if needed
-                del X_train_fold_cudf, y_train_fold_cupy, X_val_fold_cudf, y_val_fold_cupy
-                del X_train_tfidf, X_val_tfidf, y_pred_val_gpu
-                del model, tfidf_vectorizer # Delete model/vectorizer from this fold
-                cupy.get_default_memory_pool().free_all_blocks()
-
-
-            except Exception as fold_e:
-                 print(f"    Error in Fold {fold_num} for params {params}: {fold_e}")
-                 fold_scores.append(0) # Assign 0 score if fold fails
-
-
-        # Average score across folds for this parameter set
-        avg_score = np.mean(fold_scores) if fold_scores else 0
-        print(f"  Params: {params} -> Avg CV Score: {avg_score:.4f}")
-        # results.append({'params': params, 'score': avg_score}) # Append to results list if needed
-
-        if avg_score > best_score:
-            best_score = avg_score
-            best_params = params
-
-    tuning_time = time.time() - start_time_tuning
-    print(f"Manual hyperparameter tuning complete in {tuning_time:.2f} seconds on {train_year} data.")
-    if best_params:
-        print(f"Best parameters found: {best_params}")
-        print(f"Best cross-validation accuracy: {best_score:.4f}")
+def get_hyperparameters_for_seed_year(params_dict, seed, year):
+    """Get optimal hyperparameters for a specific seed and year"""
+    key = (seed, year)
+    
+    if params_dict is None or key not in params_dict:
+        print(f"Warning: No optimal parameters found for seed {seed}, year {year}. Using defaults.")
+        # Return reasonable defaults
+        return {
+            'tfidf_use_idf': True,
+            'tfidf_norm': 'l2',
+            'svm_C': 1.0
+        }
+    
+    best_params = params_dict[key]
+    
+    # Extract parameters from the nested dictionary structure
+    extracted_params = {}
+    
+    # Extract TF-IDF parameters
+    if 'tfidf__use_idf' in best_params:
+        extracted_params['tfidf_use_idf'] = best_params['tfidf__use_idf']
+    elif 'tfidf_use_idf' in best_params:
+        extracted_params['tfidf_use_idf'] = best_params['tfidf_use_idf']
     else:
-        print(f"Warning: No best parameters found for {train_year} (tuning may have failed).")
-        return None, None # Return None if tuning failed
+        extracted_params['tfidf_use_idf'] = True
+    
+    if 'tfidf__norm' in best_params:
+        extracted_params['tfidf_norm'] = best_params['tfidf__norm']
+    elif 'tfidf_norm' in best_params:
+        extracted_params['tfidf_norm'] = best_params['tfidf_norm']
+    else:
+        extracted_params['tfidf_norm'] = 'l2'
+    
+    # Extract SVM parameters
+    if 'model__C' in best_params:
+        extracted_params['svm_C'] = best_params['model__C']
+    elif 'svm_C' in best_params:
+        extracted_params['svm_C'] = best_params['svm_C']
+    else:
+        extracted_params['svm_C'] = 1.0
+    
+    print(f"Using parameters for seed {seed}, year {year}: {extracted_params}")
+    return extracted_params
+def set_all_seeds(seed_value):
+    """Set random seeds for reproducibility"""
+    random.seed(seed_value)
+    np.random.seed(seed_value)
+    # Note: sklearn uses numpy's random state
 
+def extract_unique_speaker_id(speakerid):
+    """Extract the last 6 digits of speaker ID as unique identifier"""
+    return str(speakerid)[-6:]
 
-    # --- Final Model Training (on Full Train Year Data with Best Params) ---
-    print(f"Training final model on full {train_year} data using best parameters...")
-    start_time_final_train = time.time()
+def load_congress_data(year_str):
+    """Load data for a specific congress year"""
+    input_csv_path = Path(f"data/processed/house_db/house_cleaned_{year_str}.csv")
+    
+    if not input_csv_path.exists():
+        print(f"⚠️  Data file not found for Congress {year_str}")
+        return None
+    
+    try:
+        df = pd.read_csv(input_csv_path)
+        
+        # Basic validation
+        if df.empty or not all(col in df.columns for col in ['speech', 'party', 'speakerid']):
+            print(f"⚠️  Invalid data structure for Congress {year_str}")
+            return None
+        
+        # Clean data
+        df.dropna(subset=['speech', 'party', 'speakerid'], inplace=True)
+        
+        if df.empty:
+            print(f"⚠️  No data remaining after cleaning for Congress {year_str}")
+            return None
+        
+        # Add unique speaker ID column
+        df['unique_speaker_id'] = df['speakerid'].apply(extract_unique_speaker_id)
+        
+        print(f"✅ Loaded Congress {year_str}: {len(df)} speeches, {len(df['unique_speaker_id'].unique())} unique speakers")
+        return df
+        
+    except Exception as e:
+        print(f"❌ Error loading Congress {year_str}: {e}")
+        return None
 
-    # Get full train_year data (including speakers left out for tuning validation)
-    # Use the original full train_df_full loaded at the start of the function
-    X_train_full_year_pd = train_df_full["speech"]
-    y_train_full_year_pd = train_df_full["party"]
-
-    # Encode full year labels
-    train_full_year_data_to_encode = pd.DataFrame({'party': y_train_full_year_pd, 'speech': X_train_full_year_pd})
-    train_full_year_encoded_df = encode_labels_with_map(train_full_year_data_to_encode, party_map)
-    X_train_full_year_pd_aligned = train_full_year_encoded_df['speech'].reset_index(drop=True)
-    y_train_full_year_encoded_pd_aligned = train_full_year_encoded_df['label'].reset_index(drop=True)
-
-    if X_train_full_year_pd_aligned.empty or y_train_full_year_encoded_pd_aligned.empty:
-        print(f"⚠️  Skipping final training for {train_year} (seed {random_state}): Full train data empty after encoding.")
+def train_model_on_congress(train_data, fixed_vocabulary_dict, random_state, optimal_params):
+    """Train SVM model on training congress data using optimal hyperparameters"""
+    print("Training model on source congress...")
+    
+    # Use all data from training congress (no train/val split within source)
+    X_train = train_data["speech"]
+    y_train = train_data["party"]
+    
+    # Encode labels
+    train_data_to_encode = pd.DataFrame({'party': y_train, 'speech': X_train})
+    train_encoded_df = encode_labels_with_map(train_data_to_encode, PARTY_MAP)
+    
+    if train_encoded_df.empty:
+        print("⚠️  No valid data after encoding")
         return None, None
+    
+    X_train_encoded = train_encoded_df['speech'].reset_index(drop=True)
+    y_train_encoded = train_encoded_df['label'].reset_index(drop=True)
+    
+    if len(np.unique(y_train_encoded)) < 2:
+        print("⚠️  Insufficient classes for training")
+        return None, None
+    
+    # Create TF-IDF vectorizer with optimal hyperparameters for this seed-year
+    tfidf_vectorizer = TfidfVectorizer(
+        vocabulary=fixed_vocabulary_dict,
+        ngram_range=(1, 2),  # Matching your baseline
+        lowercase=False,
+        stop_words=None,
+        use_idf=optimal_params['tfidf_use_idf'],
+        norm=optimal_params['tfidf_norm']
+    )
+    
+    # Transform training data
+    X_train_tfidf = tfidf_vectorizer.fit_transform(X_train_encoded)
+    
+    # Train SVM model with optimal C parameter
+    svm_model = LinearSVC(
+        C=optimal_params['svm_C'],
+        max_iter=DEFAULT_MAX_ITER,
+        random_state=random_state
+    )
+    
+    svm_model.fit(X_train_tfidf, y_train_encoded)
+    
+    print(f"Model trained successfully on {len(X_train_encoded)} samples")
+    print(f"Using parameters: C={optimal_params['svm_C']}, use_idf={optimal_params['tfidf_use_idf']}, norm='{optimal_params['tfidf_norm']}'")
+    return svm_model, tfidf_vectorizer
 
-    # Convert full train data to cuDF/CuPy
-    X_train_full_year_cudf = cudf.Series(X_train_full_year_pd_aligned.apply(clean_text_for_tfidf))
-    y_train_full_year_cupy = cupy.asarray(y_train_full_year_encoded_pd_aligned.to_numpy(dtype=np.int32))
-
-
-    # Instantiate final components with best params
-    best_tfidf_params = {k.split('__')[1]: v for k, v in best_params.items() if k.startswith('tfidf__')}
-    best_model_params = {k.split('__')[1]: v for k, v in best_params.items() if k.startswith('model__')}
-
-    final_tfidf_vectorizer = TfidfVectorizer(**best_tfidf_params)
-
-    if model_type == 'bayes':
-        final_model = ComplementNB(**best_model_params)
-    elif model_type == 'svm':
-        final_model = LinearSVC(**best_model_params)
-    elif model_type == 'lr':
-        final_model = LogisticRegression(penalty='l2', **best_model_params)
+def evaluate_on_test_congress(model, vectorizer, test_data, training_speaker_ids, random_state):
+    """Evaluate model on test congress with speaker exclusion"""
+    print("Evaluating on target congress...")
+    
+    # Step 1: Exclude speakers who were in training data
+    test_data['unique_speaker_id'] = test_data['speakerid'].apply(extract_unique_speaker_id)
+    filtered_test_data = test_data[~test_data['unique_speaker_id'].isin(training_speaker_ids)].copy()
+    
+    print(f"Original test data: {len(test_data)} speeches")
+    print(f"After speaker exclusion: {len(filtered_test_data)} speeches")
+    print(f"Excluded {len(test_data) - len(filtered_test_data)} speeches from {len(training_speaker_ids)} training speakers")
+    
+    if filtered_test_data.empty:
+        print("⚠️  No test data remaining after speaker exclusion")
+        return None
+    
+    # Step 2: Randomly sample 15% of filtered data
+    sample_size = max(1, int(len(filtered_test_data) * TEST_SIZE))
+    
+    if sample_size >= len(filtered_test_data):
+        # If 15% would be the entire dataset, use all
+        test_sample = filtered_test_data.copy()
     else:
-        # This should not happen if model_type was handled above
-        raise ValueError(f"Unknown model type for final model instantiation: {model_type}")
-
-
-    # Fit final TF-IDF and Model on the full train_year data
-    X_train_full_year_tfidf = final_tfidf_vectorizer.fit_transform(X_train_full_year_cudf)
-    final_model.fit(X_train_full_year_tfidf, y_train_full_year_cupy)
-
-    final_train_time = time.time() - start_time_final_train
-    print(f"Final model training complete in {final_train_time:.2f} seconds on {train_year} data.")
-
-    # --- Saving the trained components (TF-IDF Vectorizer and Model) ---
-    print(f"Saving the final TF-IDF vectorizer and {model_type.upper()} model for {train_year} (seed {random_state})...")
-    tfidf_filename = MODEL_DIR_PATH / f"tfidf_{model_type}_{train_year}_seed{random_state}_vectorizer.joblib"
-    model_filename = MODEL_DIR_PATH / f"tfidf_{model_type}_{train_year}_seed{random_state}_model.joblib"
+        test_sample = filtered_test_data.sample(n=sample_size, random_state=random_state)
+    
+    print(f"Final test set size: {len(test_sample)} speeches ({sample_size} requested)")
+    
+    # Step 3: Prepare test data
+    X_test = test_sample["speech"]
+    y_test = test_sample["party"]
+    
+    # Encode test labels
+    test_data_to_encode = pd.DataFrame({'party': y_test, 'speech': X_test})
+    test_encoded_df = encode_labels_with_map(test_data_to_encode, PARTY_MAP)
+    
+    if test_encoded_df.empty:
+        print("⚠️  No valid test data after encoding")
+        return None
+    
+    X_test_encoded = test_encoded_df['speech'].reset_index(drop=True)
+    y_test_encoded = test_encoded_df['label'].reset_index(drop=True)
+    
+    if len(np.unique(y_test_encoded)) < 2:
+        print("⚠️  Insufficient classes in test data")
+        return None
+    
+    # Step 4: Transform test data and make predictions
+    X_test_tfidf = vectorizer.transform(X_test_encoded)
+    y_pred = model.predict(X_test_tfidf)
+    
+    # Step 5: Calculate metrics (matching your baseline)
     try:
-        joblib.dump(final_tfidf_vectorizer, tfidf_filename)
-        joblib.dump(final_model, model_filename)
-        print(f"Final TF-IDF vectorizer saved to {tfidf_filename}")
-        print(f"Final Model saved to {model_filename}")
+        # Accuracy
+        accuracy = accuracy_score(y_test_encoded, y_pred)
+        
+        # F1 Score (weighted)
+        f1_score = sklearn_f1_score(y_test_encoded, y_pred, average='weighted', zero_division=0)
+        
+        # AUC Score
+        auc_score = None
+        try:
+            if hasattr(model, "decision_function"):
+                decision_scores = model.decision_function(X_test_tfidf)
+                auc_score = roc_auc_score(y_test_encoded, decision_scores)
+        except Exception as auc_e:
+            print(f"Could not calculate AUC: {auc_e}")
+            auc_score = None
+        
+        # Additional metrics for verification (not logged but printed)
+        cm = confusion_matrix(y_test_encoded, y_pred)
+        
+        # Print results
+        print(f"Test Results:")
+        print(f"  Accuracy: {accuracy:.4f}")
+        print(f"  F1 Score: {f1_score:.4f}")
+        print(f"  AUC: {auc_score:.4f if auc_score is not None else 'N/A'}")
+        print(f"  Confusion Matrix:\n{cm}")
+        
+        return {
+            'accuracy': round(accuracy, 4),
+            'f1_score': round(f1_score, 4),
+            'auc': round(auc_score, 4) if auc_score is not None else "NA"
+        }
+        
     except Exception as e:
-        print(f"Error saving the final components for {train_year} (seed {random_state}): {e}")
-        # Decide if you want to return None here if saving fails
-        # For this comprehensive run, it's better to have the objects to evaluate
-        # immediately, even if saving failed. But saving is good practice.
+        print(f"Error calculating metrics: {e}")
+        return None
 
-
-    # Clean up full train year data from GPU memory
-    del X_train_full_year_cudf, y_train_full_year_cupy, X_train_full_year_tfidf
-    cupy.get_default_memory_pool().free_all_blocks()
-
-
-    # Return the trained components
-    return final_tfidf_vectorizer, final_model
-
-
-# Function to evaluate trained components on data from a specific test year
-def evaluate_model_on_year(trained_tfidf_vectorizer, trained_model, test_year: str, model_type: str, party_map: dict):
-    """
-    Loads data for test_year, uses the pre-trained TF-IDF vectorizer and model
-    to predict, calculates metrics, and returns them.
-    """
-    if trained_tfidf_vectorizer is None or trained_model is None:
-        print(f"  Skipping evaluation on {test_year}: Trained components are missing.")
-        return None, None, None # Return None for metrics
-
-    print(f"\n  Evaluating model (trained on earlier year) on test data ({test_year})...")
-    start_time_test = time.time()
-
-    # --- Data Loading (Test Year) ---
-    test_input_path = f"data/merged/house_db/house_merged_{test_year}.csv"
-    if not os.path.exists(test_input_path):
-        print(f"⚠️  Skipping evaluation on {test_year}: CSV file not found at {test_input_path}.")
-        return None, None, None
-
-    print(f"  Loading test data for year {test_year}...")
-    test_df_full = pd.read_csv(test_input_path)
-    print("  Test data loaded.")
-
-    if test_df_full.empty or not all(col in test_df_full.columns for col in ['speech', 'party', 'speakerid']):
-         print(f"⚠️  Skipping evaluation on {test_year}: Data empty or missing required columns.")
-         return None, None, None
-    test_df_full.dropna(subset=['speech', 'party', 'speakerid'], inplace=True)
-    if test_df_full.empty:
-        print(f"⚠️  Skipping evaluation on {test_year}: Data empty after NaNs drop.")
-        return None, None, None
-
-
-    # --- Encoding (Test Year) ---
-    print("  Encoding labels for test data...")
-    test_data_to_encode = pd.DataFrame({'party': test_df_full["party"], 'speech': test_df_full["speech"]})
-    test_encoded_df = encode_labels_with_map(test_data_to_encode, party_map)
-
-    X_test_pd_aligned = test_encoded_df['speech'].reset_index(drop=True)
-    y_test_encoded_pd_aligned = test_encoded_df['label'].reset_index(drop=True)
-
-    if X_test_pd_aligned.empty or y_test_encoded_pd_aligned.empty:
-        print(f"⚠️  Skipping evaluation on {test_year}: Test data empty after encoding & alignment.")
-        return None, None, None
-
-    # Convert test data to cuDF/CuPy
-    X_test_cudf = cudf.Series(X_test_pd_aligned.apply(clean_text_for_tfidf))
-    y_test_encoded_cpu = y_test_encoded_pd_aligned.to_numpy(dtype=np.int32)
-
-
-    # --- Testing on Test Year Data ---
-    # Use the loaded/trained components for transformation and prediction
+def run_cross_period_evaluation():
+    """Main function to run cross-period evaluation"""
+    
+    # Load fixed vocabulary
+    sklearn_vocab_load_path = Path("data/vocabulary_dumps/1_word/global_vocabulary_processed_bigram_100_min_df_sklearn_from_sklearn.joblib")
+    
+    if not sklearn_vocab_load_path.exists():
+        print(f"ERROR: Fixed vocabulary file not found at {sklearn_vocab_load_path}")
+        print("Please run the global vocabulary generation script first.")
+        return
+    
+    print(f"Loading fixed scikit-learn vocabulary from {sklearn_vocab_load_path}...")
+    fixed_sklearn_vocabulary = joblib.load(sklearn_vocab_load_path)
+    print(f"Loaded fixed vocabulary with {len(fixed_sklearn_vocabulary)} terms.")
+    
+    # Load optimal hyperparameters
+    optimal_params_dict = load_optimal_hyperparameters()
+    if optimal_params_dict is None:
+        print("ERROR: Could not load optimal hyperparameters. Exiting.")
+        return
+    
+    # Generate congress years to process
+    congress_years_to_process = [f"{i:03}" for i in range(CONGRESS_YEAR_START, CONGRESS_YEAR_END + 1)]
+    print(f"Congress years to process: {congress_years_to_process}")
+    
+    # Calculate total combinations
+    total_combinations = len(congress_years_to_process) * (len(congress_years_to_process) - 1) * len(CROSS_PERIOD_SEEDS)
+    print(f"Total combinations to process: {total_combinations}")
+    
+    combination_count = 0
+    
+    # Main evaluation loop
+    for current_seed in CROSS_PERIOD_SEEDS:
+        print(f"\n{'='*60}")
+        print(f"STARTING EVALUATION WITH SEED: {current_seed}")
+        print(f"{'='*60}")
+        
+        # Set all random seeds for this run
+        set_all_seeds(current_seed)
+        
+        for train_year in congress_years_to_process:
+            print(f"\n{'---'*20}")
+            print(f"TRAINING CONGRESS: {train_year}")
+            print(f"{'---'*20}")
+            
+            # Get optimal hyperparameters for this seed-year combination
+            optimal_params = get_hyperparameters_for_seed_year(optimal_params_dict, current_seed, train_year)
+            
+            # Load training data
+            train_data = load_congress_data(train_year)
+            if train_data is None:
+                print(f"⚠️  Skipping training year {train_year} - no data available")
+                continue
+            
+            # Extract unique speaker IDs from training data
+            training_speaker_ids = set(train_data['unique_speaker_id'].unique())
+            print(f"Training speakers: {len(training_speaker_ids)} unique speakers")
+            
+            # Train model on this congress with optimal parameters
+            model, vectorizer = train_model_on_congress(train_data, fixed_sklearn_vocabulary, current_seed, optimal_params)
+            if model is None or vectorizer is None:
+                print(f"⚠️  Failed to train model on Congress {train_year}")
+                continue
+            
+            # Test on all other congresses
+            for test_year in congress_years_to_process:
+                if test_year == train_year:
+                    continue  # Skip same-period testing
+                
+                combination_count += 1
+                print(f"\n--- Combination {combination_count}/{total_combinations}: {train_year} → {test_year} ---")
+                
+                # Load test data
+                test_data = load_congress_data(test_year)
+                if test_data is None:
+                    print(f"⚠️  Skipping test year {test_year} - no data available")
+                    continue
+                
+                try:
+                    # Evaluate model on test congress
+                    results = evaluate_on_test_congress(
+                        model, vectorizer, test_data, training_speaker_ids, current_seed
+                    )
+                    
+                    if results is not None:
+                        # Log results
+                        with open(CROSS_PERIOD_LOG_PATH, "a") as f:
+                            f.write(f"{current_seed},{train_year},{test_year},"
+                                   f"{results['accuracy']},{results['f1_score']},{results['auc']}\n")
+                        
+                        print(f"✅ Completed: {train_year} → {test_year}")
+                    else:
+                        print(f"❌ Failed: {train_year} → {test_year}")
+                        
+                except Exception as e:
+                    print(f"❌ Error in {train_year} → {test_year}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    continue
+            
+            # Cleanup for memory management
+            del model, vectorizer, train_data
+            if 'test_data' in locals():
+                del test_data
+    
+    print(f"\n{'='*60}")
+    print("CROSS-PERIOD EVALUATION COMPLETE")
+    print(f"{'='*60}")
+    print(f"Results saved to: {CROSS_PERIOD_LOG_PATH}")
+    
+    # Display summary statistics
     try:
-        X_test_tfidf = trained_tfidf_vectorizer.transform(X_test_cudf)
-        y_test_pred_gpu = trained_model.predict(X_test_tfidf)
-        evaluation_time = time.time() - start_time_test
-        print(f"  Evaluation complete in {evaluation_time:.2f} seconds.")
-
-        y_test_pred_cpu = cupy.asnumpy(y_test_pred_gpu)
-
-    except Exception as e:
-        print(f"  Error during evaluation on {test_year}: {e}")
-        return None, None, None # Return None for metrics
-
-
-    # --- Calculate Metrics ---
-    accuracy = accuracy_score(y_test_encoded_cpu, y_test_pred_cpu)
-    f1_weighted = f1_score(y_test_encoded_cpu, y_test_pred_cpu, average='weighted')
-
-    # (AUC calculation - needs predict_proba or decision_function from trained_model)
-    auc = None
-    try:
-        if hasattr(trained_model, "predict_proba"):
-            probability_scores_gpu = trained_model.predict_proba(X_test_tfidf)
-            probability_scores_cpu = cupy.asnumpy(probability_scores_gpu)
-            if len(np.unique(y_test_encoded_cpu)) == 2:
-                 auc = roc_auc_score(y_test_encoded_cpu, probability_scores_cpu[:, 1])
+        results_df = pd.read_csv(CROSS_PERIOD_LOG_PATH)
+        if not results_df.empty:
+            print(f"\nSUMMARY STATISTICS:")
+            print(f"Total combinations processed: {len(results_df)}")
+            print(f"Average accuracy: {results_df['accuracy'].mean():.4f}")
+            print(f"Average F1 score: {results_df['f1_score'].mean():.4f}")
+            
+            # Convert 'NA' to NaN for numeric operations
+            results_df['auc_numeric'] = pd.to_numeric(results_df['auc'], errors='coerce')
+            auc_mean = results_df['auc_numeric'].mean()
+            if not pd.isna(auc_mean):
+                print(f"Average AUC: {auc_mean:.4f}")
             else:
-                 from sklearn.preprocessing import LabelBinarizer
-                 lb = LabelBinarizer().fit(y_test_encoded_cpu)
-                 y_test_encoded_onehot_cpu = lb.transform(y_test_encoded_cpu)
-                 if y_test_encoded_onehot_cpu.shape[1] == probability_scores_cpu.shape[1]:
-                      auc = roc_auc_score(y_test_encoded_onehot_cpu, probability_scores_cpu, average='macro', multi_class='ovr')
-                 elif probability_scores_cpu.ndim == 1 and y_test_encoded_onehot_cpu.shape[1] == 2: # Handle binary case where predict_proba might return 1D array
-                      auc = roc_auc_score(y_test_encoded_cpu, probability_scores_cpu) # type: ignore # Use the raw score for binary
-                 else:
-                      print(f"  AUC shape mismatch Warning for {model_type} on {test_year}.")
-
-
-        elif hasattr(trained_model, "decision_function"):
-            decision_scores_gpu = trained_model.decision_function(X_test_tfidf)
-            decision_scores_cpu = cupy.asnumpy(decision_scores_gpu)
-            if len(np.unique(y_test_encoded_cpu)) == 2:
-                 auc = roc_auc_score(y_test_encoded_cpu, decision_scores_cpu)
-            else:
-                 # Handle multi-class decision_function
-                 auc = roc_auc_score(y_test_encoded_cpu, decision_scores_cpu, multi_class='ovr', average='macro') # type: ignore
-
-
+                print("Average AUC: N/A (no valid AUC scores)")
+                
+            print(f"\nResults by seed:")
+            seed_summary = results_df.groupby('seed')[['accuracy', 'f1_score']].agg(['mean', 'std']).round(4)
+            print(seed_summary)
+        else:
+            print("No results to summarize")
     except Exception as e:
-        print(f"  Could not calculate ROC-AUC for {model_type} on {test_year}: {e}")
-        auc = None
+        print(f"Error generating summary: {e}")
 
-    # Clean up test data from GPU memory
-    del X_test_cudf, X_test_tfidf, y_test_pred_gpu
-    cupy.get_default_memory_pool().free_all_blocks()
-
-    return accuracy, f1_weighted, auc
-
-
-# ------ Main Execution for Comprehensive Cross-Year Evaluation -------
+# ------ Main Execution -------
 if __name__ == "__main__":
-    # Generate list of all years to consider for training and testing
-    all_years_str = [f"{i:03}" for i in range(CONGRESS_YEAR_START, CONGRESS_YEAR_END + 1)] # Include END year for testing
-
-    models_to_run = ['lr', 'svm', 'bayes'] # Add or remove models here
-
-    # Dictionary to store trained models for re-use across test years
-    # Structure: trained_components[seed][train_year][model_type] = (tfidf_vectorizer, model)
-    trained_components = {}
-
-
-    for seed in SEEDS:
-        print(f"\n--- Starting comprehensive cross-year runs for seed: {seed} ---")
-        trained_components[seed] = {} # Initialize for this seed
-
-        for train_year in all_years_str:
-            print(f"\nProcessing Train Year: {train_year} (Seed {seed})")
-            trained_components[seed][train_year] = {} # Initialize for this train_year/seed
-
-            # --- Train Models for the current train_year and seed ---
-            # This happens ONCE per train_year/seed
-            print(f"Training models for train_year: {train_year}")
-
-            for model_type in models_to_run:
-                 model_config = model_configs.get(model_type)
-                 if model_config is None:
-                     print(f"Warning: Configuration for model '{model_type}' not found. Skipping training for {train_year}.")
-                     continue
-
-                 # Train the model and get the trained components
-                 tfidf_vectorizer, model = train_model_for_year(
-                     train_year, model_type, model_config, seed, PARTY_MAP
-                 )
-
-                 # Store the trained components if training was successful
-                 if tfidf_vectorizer is not None and model is not None:
-                     trained_components[seed][train_year][model_type] = (tfidf_vectorizer, model)
-                 else:
-                     print(f"Skipping evaluation for {model_type} (Train {train_year}) as training failed.")
-
-
-            # --- Evaluate Trained Models on all subsequent years ---
-            print(f"\nEvaluating models trained on {train_year} (Seed {seed}) on subsequent years...")
-            try:
-                 train_year_index = all_years_str.index(train_year)
-            except ValueError:
-                 print(f"Error: Train year {train_year} not found in the list of all years. Skipping evaluations for this year.")
-                 continue # Skip to next train year
-
-            # Iterate through all years from the train year itself to the end for testing
-            # This includes testing on the training year itself, which gives the "within-year" performance
-            for test_year in all_years_str[train_year_index:]:
-                 print(f"\n  Evaluating on test_year: {test_year} (Train {train_year}, Seed {seed})")
-
-                 for model_type in models_to_run:
-                     # Retrieve the trained components for this train_year/seed/model_type
-                     components = trained_components[seed][train_year].get(model_type)
-
-                     if components: # Check if components were successfully trained and stored
-                         tfidf_vectorizer_trained, model_trained = components
-
-                         # Evaluate the trained model on the current test_year data
-                         accuracy, f1_weighted, auc = evaluate_model_on_year(
-                             tfidf_vectorizer_trained, model_trained, test_year, model_type, PARTY_MAP
-                         )
-
-                         # --- Log results ---
-                         if accuracy is not None: # Only log if evaluation was successful
-                             print(f"--- Results ({model_type.upper()}): Train {train_year} -> Test {test_year} (Seed {seed}) ---")
-                             print(f"Accuracy: {accuracy:.4f}")
-                             print(f"Weighted F1 Score: {f1_weighted:.4f}")
-                             if auc is not None:
-                                print(f"ROC-AUC          : {auc:.4f}")
-                             print("-" * 25)
-
-                             with open(COMPREHENSIVE_CROSS_YEAR_LOG_PATH, "a") as f:
-                                 f.write(f"{seed},{train_year},{test_year},{accuracy:.4f},{f1_weighted:.4f},{auc if auc is not None else 'NA'}\n")
-                         else:
-                             print(f"  Skipping logging for {model_type} (Train {train_year} -> Test {test_year}, Seed {seed}) due to evaluation error.")
-
-                     else:
-                         print(f"  Skipping evaluation for {model_type} (Train {train_year} -> Test {test_year}, Seed {seed}) as trained components are missing.")
-
-
-    print("\n--- Comprehensive cross-year evaluation script finished ---")
-    print(f"Results saved in the '{COMPREHENSIVE_CROSS_YEAR_LOG_PATH}' file.")
-
-    # Note: You will need a separate script or notebook to load COMPREHENSIVE_CROSS_YEAR_LOG_PATH
-    # and generate plots (e.g., heatmap, decay curves) for visualization.
+    print("Starting Cross-Period Evaluation Script")
+    print(f"Seeds to use: {CROSS_PERIOD_SEEDS}")
+    print(f"Congress range: {CONGRESS_YEAR_START} to {CONGRESS_YEAR_END}")
+    print(f"Test size: {TEST_SIZE * 100}%")
+    print(f"Optimal parameters will be loaded from: {OPTIMAL_PARAMS_CSV_PATH}")
+    
+    # Run the evaluation
+    run_cross_period_evaluation()
+    
+    print("\n--- Script finished ---")
