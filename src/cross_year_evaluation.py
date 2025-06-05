@@ -38,9 +38,7 @@ TEST_SIZE = 0.15  # Fixed 15% as per requirements
 DEFAULT_RANDOM_STATE = split_params.get('random_state', 42)
 
 # Define the 3 seeds for cross-period evaluation
-DEFAULT_RANDOM_STATE = split_params.get('random_state', 42)
-CROSS_PERIOD_SEEDS = split_params.get('seeds', [DEFAULT_RANDOM_STATE])
-#CROSS_PERIOD_SEEDS = [42, 123, 456]  # You can modify these as needed -> proposed by claude
+CROSS_PERIOD_SEEDS = [42, 123, 456]  # You can modify these as needed
 
 data_params = common_params.get('data_params', {})
 CONGRESS_YEAR_START = data_params.get('congress_year_start', 76)
@@ -80,26 +78,46 @@ def load_optimal_hyperparameters():
             print(f"ERROR: Optimal parameters file not found at {OPTIMAL_PARAMS_CSV_PATH}")
             return None
         
+        # Read CSV with explicit column specification
         df = pd.read_csv(OPTIMAL_PARAMS_CSV_PATH)
         print(f"Loaded optimal hyperparameters from {OPTIMAL_PARAMS_CSV_PATH}")
+        print(f"CSV columns: {list(df.columns)}")
+        print(f"CSV shape: {df.shape}")
+        print("First few rows:")
+        print(df.head())
+        
+        # Ensure we have the right columns
+        expected_columns = ['seed', 'year', 'accuracy', 'f1_score', 'auc', 'best param']
+        if not all(col in df.columns for col in expected_columns):
+            print(f"ERROR: Missing expected columns. Found: {list(df.columns)}")
+            print(f"Expected: {expected_columns}")
+            return None
         
         # Create a dictionary for quick lookup: (seed, year) -> best_params
         params_dict = {}
         
-        for _, row in df.iterrows():
-            seed = int(row['seed'])
-            year = str(row['year']).zfill(3)  # Ensure 3-digit format
-            
-            # Parse the best_params string (it's stored as a string representation of dict)
+        for idx, row in df.iterrows():
             try:
-                best_params_str = row['best_params'] if 'best_params' in row else row['best param']
-                # Handle the string representation of dictionary
+                # Explicitly use column names
+                seed = int(row['seed'])
+                year = str(int(row['year'])).zfill(3)  # Convert to int first, then to string
+                best_params_str = row['best param']
+                
+                # Skip if best_params is NaN or empty
+                if pd.isna(best_params_str) or best_params_str == '':
+                    print(f"Warning: Empty best_params for seed {seed}, year {year}")
+                    continue
+                
+                # Parse the best_params string
                 import ast
-                best_params = ast.literal_eval(best_params_str)
+                best_params = ast.literal_eval(str(best_params_str))
                 params_dict[(seed, year)] = best_params
                 
+                print(f"Loaded params for seed {seed}, year {year}: {best_params}")
+                
             except Exception as e:
-                print(f"Warning: Could not parse best_params for seed {seed}, year {year}: {e}")
+                print(f"Warning: Could not parse row {idx}: {e}")
+                print(f"Row data: {row.to_dict()}")
                 continue
         
         print(f"Successfully loaded parameters for {len(params_dict)} seed-year combinations")
@@ -107,6 +125,8 @@ def load_optimal_hyperparameters():
         
     except Exception as e:
         print(f"ERROR loading optimal hyperparameters: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 def get_hyperparameters_for_seed_year(params_dict, seed, year):
@@ -319,7 +339,10 @@ def evaluate_on_test_congress(model, vectorizer, test_data, training_speaker_ids
         print(f"Test Results:")
         print(f"  Accuracy: {accuracy:.4f}")
         print(f"  F1 Score: {f1_score:.4f}")
-        print(f"  AUC: {auc_score:.4f if auc_score is not None else 'N/A'}")
+        if auc_score is not None:
+            print(f"  AUC: {auc_score:.4f}")
+        else:
+            print(f"  AUC: N/A")
         print(f"  Confusion Matrix:\n{cm}")
         
         return {
