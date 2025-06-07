@@ -84,15 +84,21 @@ timing_log_paths = {
 }
 
 # detail csv file header
-detailed_csv_header_columns = ["seed", "year", "accuracy", "f1_score", "auc", "best param"]
-detailed_csv_header = ",".join(detailed_csv_header_columns) + "\n"
+detailed_csv_headers = {
+    'bayes': ["seed", "year", "accuracy", "f1_score", "auc", "bayes_alpha", "tfidf_norm"],
+    'lr': ["seed", "year", "accuracy", "f1_score", "auc", "lr_C", "lr_max_iter", "lr_penalty", "lr_class_weight", "tfidf_norm"]
+}
 
+# Replace your current header creation loop with this:
 for model_type, log_path in detailed_log_paths.items():
+    header_columns = detailed_csv_headers[model_type]
+    header_string = ",".join(header_columns) + "\n"
+    
     if os.path.exists(log_path):
         os.remove(log_path)
         print(f"Deleted existing detailed log file: {log_path}")
     with open(log_path, "w") as f:
-        f.write(detailed_csv_header)
+        f.write(header_string)
 
 #timing csv header
 timing_csv_header_columns = [
@@ -108,6 +114,65 @@ for model_type, log_path in timing_log_paths.items(): # Using your globally defi
         print(f"Deleted existing timing log file: {log_path}")
     with open(log_path, "w") as f:
         f.write(timing_csv_header)
+        
+
+def extract_model_parameters(best_params, model_type):
+    """Extract individual parameters from best_params dictionary based on model type"""
+    
+    extracted_params = {}
+    
+    # Common TF-IDF parameters (both models have this)
+    if 'tfidf__norm' in best_params:
+        extracted_params['tfidf_norm'] = best_params['tfidf__norm']
+    elif 'tfidf_norm' in best_params:
+        extracted_params['tfidf_norm'] = best_params['tfidf_norm']
+    else:
+        extracted_params['tfidf_norm'] = 'l2'  # Default
+    
+    # Model-specific parameters
+    if model_type == 'bayes':
+        # Extract Naive Bayes alpha parameter
+        if 'model__alpha' in best_params:
+            extracted_params['bayes_alpha'] = best_params['model__alpha']
+        elif 'bayes_alpha' in best_params:
+            extracted_params['bayes_alpha'] = best_params['bayes_alpha']
+        else:
+            extracted_params['bayes_alpha'] = 1.0  # Default
+            
+    elif model_type == 'lr':
+        # Extract Logistic Regression C parameter
+        if 'model__C' in best_params:
+            extracted_params['lr_C'] = best_params['model__C']
+        elif 'lr_C' in best_params:
+            extracted_params['lr_C'] = best_params['lr_C']
+        else:
+            extracted_params['lr_C'] = 1.0  # Default
+        
+        # Extract max_iter parameter
+        if 'model__max_iter' in best_params:
+            extracted_params['lr_max_iter'] = best_params['model__max_iter']
+        elif 'lr_max_iter' in best_params:
+            extracted_params['lr_max_iter'] = best_params['lr_max_iter']
+        else:
+            extracted_params['lr_max_iter'] = 1000  # Default
+        
+        # Extract penalty parameter
+        if 'model__penalty' in best_params:
+            extracted_params['lr_penalty'] = best_params['model__penalty']
+        elif 'lr_penalty' in best_params:
+            extracted_params['lr_penalty'] = best_params['lr_penalty']
+        else:
+            extracted_params['lr_penalty'] = 'l2'  # Default
+        
+        # Extract class_weight parameter
+        if 'model__class_weight' in best_params:
+            extracted_params['lr_class_weight'] = best_params['model__class_weight']
+        elif 'lr_class_weight' in best_params:
+            extracted_params['lr_class_weight'] = best_params['lr_class_weight']
+        else:
+            extracted_params['lr_class_weight'] = None  # Default
+    
+    return extracted_params
 
 # --- Define model function ---
 def run_model_pipeline(
@@ -445,11 +510,14 @@ def run_model_pipeline(
     print("-" * 25)
 
     result_json = {
-        "seed": random_state, "year": congress_year, "accuracy": round(final_accuracy_eval, 4),
-        "f1_score": round(final_f1_weighted_eval, 4), "auc": round(auc_eval, 4) if auc_eval is not None else "NA",
+        "seed": random_state, 
+        "year": congress_year, 
+        "accuracy": round(final_accuracy_eval, 4),
+        "f1_score": round(final_f1_weighted_eval, 4), 
+        "auc": round(auc_eval, 4) if auc_eval is not None else -1.0,  # Use -1.0 instead of "NA"
         "confusion_matrix": cm_list_eval, 
-        "labels": target_names_eval, # target_names_eval already defined
-        "classification_report": classification_report_dict, # Add the report dictionary
+        "labels": target_names_eval,
+        "classification_report": classification_report_dict,
         "best_params": best_params,
         "timing": {
             "tuning_sec": round(tuning_time, 2),
@@ -470,16 +538,33 @@ def run_model_pipeline(
             f"{result_json['timing']['total_pipeline_sec']}\n"
         )
     
+    # Replace it with this:
     current_detailed_log_path = detailed_log_paths[model_type]
     with open(current_detailed_log_path, "a") as f:
-        f.write(
-            f"{result_json['seed']},"       # Assuming seed and year are not problematic
-            f"{result_json['year']},"
-            f"{result_json['accuracy']},"
-            f"{result_json['f1_score']},"
-            f"{result_json['auc']},"
-            f"{result_json['best_params']}\n"
-        )
+        # Extract parameters specific to this model type
+        extracted_params = extract_model_parameters(result_json['best_params'], model_type)
+        
+        # Convert AUC to numeric or use a consistent numeric placeholder
+        auc_value = result_json['auc']
+        if auc_value == "NA" or auc_value is None:
+            auc_numeric = -1.0  # Use -1 as placeholder instead of "NA"
+        else:
+            auc_numeric = float(auc_value)
+        
+        # Write common fields first with numeric AUC
+        f.write(f"{result_json['seed']},{result_json['year']},{result_json['accuracy']},{result_json['f1_score']},{auc_numeric}")
+        
+        # Write model-specific parameters
+        if model_type == 'bayes':
+            f.write(f",{extracted_params['bayes_alpha']},{extracted_params['tfidf_norm']}\n")
+        elif model_type == 'lr':
+            # Handle None values for class_weight
+            class_weight_str = str(extracted_params['lr_class_weight']) if extracted_params['lr_class_weight'] is not None else 'None'
+            f.write(f",{extracted_params['lr_C']},{extracted_params['lr_max_iter']},{extracted_params['lr_penalty']},{class_weight_str},{extracted_params['tfidf_norm']}\n")
+        else:
+            # Fallback for unknown model types
+            f.write("\n")
+            print(f"Warning: Unknown model type {model_type} for parameter extraction")
 
     # Cleanup remaining major variables from this pipeline run
     if 'X_train_val_final_cudf' in locals(): del X_train_val_final_cudf
@@ -692,16 +777,38 @@ if __name__ == "__main__":
                 print(f"Error: Detailed log for {model_type_to_plot.upper()} empty/malformed after reading.")
                 continue
 
+            print(f"Debug: Columns in {model_type_to_plot} detailed log: {df_detailed_metrics.columns.tolist()}")
+            print(f"Debug: Shape of {model_type_to_plot} detailed log: {df_detailed_metrics.shape}")
+            print(f"Debug: First few rows:\n{df_detailed_metrics.head()}")
+
+            # Convert columns to numeric, handling the placeholder values
+            df_detailed_metrics['accuracy'] = pd.to_numeric(df_detailed_metrics['accuracy'], errors='coerce')
+            df_detailed_metrics['f1_score'] = pd.to_numeric(df_detailed_metrics['f1_score'], errors='coerce')
             df_detailed_metrics['auc'] = pd.to_numeric(df_detailed_metrics['auc'], errors='coerce')
-            df_avg_metrics = df_detailed_metrics.groupby('year')[['accuracy', 'f1_score', 'auc']].mean(numeric_only=True).reset_index()
+            
+            # Replace placeholder -1.0 values with NaN for proper averaging
+            df_detailed_metrics['auc'] = df_detailed_metrics['auc'].replace(-1.0, np.nan)
+            
+            # Check if we have the required columns
+            required_cols = ['accuracy', 'f1_score', 'auc']
+            missing_cols = [col for col in required_cols if col not in df_detailed_metrics.columns]
+            if missing_cols:
+                print(f"Error: Missing columns {missing_cols} in {model_type_to_plot.upper()} detailed log.")
+                continue
+
+            # Calculate averages (nanmean will ignore NaN values)
+            df_avg_metrics = df_detailed_metrics.groupby('year')[['accuracy', 'f1_score', 'auc']].agg(['mean', 'std']).reset_index()
+            
+            # Flatten column names
+            df_avg_metrics.columns = ['year', 'accuracy', 'accuracy_std', 'f1_score', 'f1_score_std', 'auc', 'auc_std']
 
             if df_avg_metrics.empty:
                 print(f"Warning: No data to average for {model_type_to_plot.upper()}. Skipping plotting.")
                 continue
 
-            df_std_metrics = df_detailed_metrics.groupby('year')[['accuracy', 'f1_score', 'auc']].std(numeric_only=True).reset_index().rename(
-                columns={'accuracy':'accuracy_std', 'f1_score':'f1_score_std', 'auc':'auc_std'})
-            df_avg_metrics = df_avg_metrics.merge(df_std_metrics, on='year', how='left')
+            # Convert NaN back to a string for CSV output if needed
+            df_avg_metrics['auc'] = df_avg_metrics['auc'].fillna('NA')
+            df_avg_metrics['auc_std'] = df_avg_metrics['auc_std'].fillna('NA')
 
             try:
                 df_avg_metrics['year_int'] = df_avg_metrics['year'].astype(int)
