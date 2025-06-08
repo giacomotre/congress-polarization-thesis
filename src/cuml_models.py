@@ -85,8 +85,8 @@ timing_log_paths = {
 
 # detail csv file header
 detailed_csv_headers = {
-    'bayes': ["seed", "year", "accuracy", "f1_score", "auc", "bayes_alpha", "tfidf_norm"],
-    'lr': ["seed", "year", "accuracy", "f1_score", "auc", "lr_C", "lr_max_iter", "lr_penalty", "lr_class_weight", "tfidf_norm"]
+    'bayes': ["seed", "year", "accuracy", "f1_score", "auc", "tn", "fp", "fn", "tp", "bayes_alpha", "tfidf_norm"],
+    'lr': ["seed", "year", "accuracy", "f1_score", "auc", "tn", "fp", "fn", "tp", "lr_C", "lr_max_iter", "lr_penalty", "lr_class_weight", "tfidf_norm"]
 }
 
 # Replace your current header creation loop with this:
@@ -509,12 +509,17 @@ def run_model_pipeline(
 
     print("-" * 25)
 
+    # In the run_model_pipeline function, update the result_json creation:
     result_json = {
         "seed": random_state, 
         "year": congress_year, 
         "accuracy": round(final_accuracy_eval, 4),
         "f1_score": round(final_f1_weighted_eval, 4), 
-        "auc": round(auc_eval, 4) if auc_eval is not None else -1.0,  # Use -1.0 instead of "NA"
+        "auc": round(auc_eval, 4) if auc_eval is not None else -1.0,
+        "tn": int(cm_cpu_eval[0, 0]) if cm_cpu_eval.size > 0 else 0,
+        "fp": int(cm_cpu_eval[0, 1]) if cm_cpu_eval.size > 0 else 0,
+        "fn": int(cm_cpu_eval[1, 0]) if cm_cpu_eval.size > 0 else 0,
+        "tp": int(cm_cpu_eval[1, 1]) if cm_cpu_eval.size > 0 else 0,
         "confusion_matrix": cm_list_eval, 
         "labels": target_names_eval,
         "classification_report": classification_report_dict,
@@ -538,7 +543,7 @@ def run_model_pipeline(
             f"{result_json['timing']['total_pipeline_sec']}\n"
         )
     
-    # Replace it with this:
+    # In the logging section, replace the writing part:
     current_detailed_log_path = detailed_log_paths[model_type]
     with open(current_detailed_log_path, "a") as f:
         # Extract parameters specific to this model type
@@ -551,8 +556,9 @@ def run_model_pipeline(
         else:
             auc_numeric = float(auc_value)
         
-        # Write common fields first with numeric AUC
-        f.write(f"{result_json['seed']},{result_json['year']},{result_json['accuracy']},{result_json['f1_score']},{auc_numeric}")
+        # Write common fields first with numeric AUC and confusion matrix
+        f.write(f"{result_json['seed']},{result_json['year']},{result_json['accuracy']},{result_json['f1_score']},{auc_numeric},"
+            f"{result_json['tn']},{result_json['fp']},{result_json['fn']},{result_json['tp']}")
         
         # Write model-specific parameters
         if model_type == 'bayes':

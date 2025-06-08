@@ -71,7 +71,7 @@ timing_log_paths = {
 }
 
 # detail csv file header
-detailed_csv_header_columns = ["seed", "year", "accuracy", "f1_score", "auc", "model_C", "tfidf_norm"]
+detailed_csv_header_columns = ["seed", "year", "accuracy", "f1_score", "auc", "tn", "fp", "fn", "tp", "model_C", "tfidf_norm"]
 detailed_csv_header = ",".join(detailed_csv_header_columns) + "\n"
 
 for model_type, log_path in detailed_log_paths.items():
@@ -375,11 +375,18 @@ def run_model_pipeline(
     print("-" * 25)
 
     result_json = {
-        "seed": random_state, "year": congress_year, "accuracy": round(final_accuracy_eval, 4),
-        "f1_score": round(final_f1_weighted_eval, 4), "auc": round(auc_eval, 4) if auc_eval is not None else "NA",
+        "seed": random_state, 
+        "year": congress_year, 
+        "accuracy": round(final_accuracy_eval, 4),
+        "f1_score": round(final_f1_weighted_eval, 4), 
+        "auc": round(auc_eval, 4) if auc_eval is not None else "NA",
+        "tn": int(cm_eval[0, 0]) if cm_eval is not None and cm_eval.size > 0 else 0,
+        "fp": int(cm_eval[0, 1]) if cm_eval is not None and cm_eval.size > 0 else 0,
+        "fn": int(cm_eval[1, 0]) if cm_eval is not None and cm_eval.size > 0 else 0,
+        "tp": int(cm_eval[1, 1]) if cm_eval is not None and cm_eval.size > 0 else 0,
         "confusion_matrix": cm_list_eval, 
-        "labels": target_names_eval, # target_names_eval already defined
-        "classification_report": classification_report_dict, # Add the report dictionary
+        "labels": target_names_eval,
+        "classification_report": classification_report_dict,
         "best_params": best_params,
         "timing": {
             "tuning_sec": round(tuning_time, 2),
@@ -421,13 +428,24 @@ def run_model_pipeline(
         else:
             tfidf_norm = 'l2'
         
-        # Write to detailed log with individual parameter columns
+        # Convert AUC to numeric or use a consistent numeric placeholder
+        auc_value = result_json['auc']
+        if auc_value == "NA" or auc_value is None:
+            auc_numeric = -1.0  # Use -1 as placeholder instead of "NA"
+        else:
+            auc_numeric = float(auc_value)
+        
+        # Write to detailed log with confusion matrix and individual parameter columns
         f.write(
             f"{result_json['seed']},"
             f"{result_json['year']},"
             f"{result_json['accuracy']},"
             f"{result_json['f1_score']},"
-            f"{result_json['auc']},"
+            f"{auc_numeric},"
+            f"{result_json['tn']},"
+            f"{result_json['fp']},"
+            f"{result_json['fn']},"
+            f"{result_json['tp']},"
             f"{model_C},"
             f"{tfidf_norm}\n"
         )

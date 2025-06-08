@@ -38,7 +38,8 @@ TEST_SIZE = 0.15  # Fixed 15% as per requirements
 DEFAULT_RANDOM_STATE = split_params.get('random_state', 42)
 
 # Define the 3 seeds for cross-period evaluation
-CROSS_PERIOD_SEEDS = [42, 123, 456]  # You can modify these as needed
+#CROSS_PERIOD_SEEDS = [42, 123, 456]  # You can modify these as needed
+CROSS_PERIOD_SEEDS = split_params.get('seeds', [DEFAULT_RANDOM_STATE])
 
 data_params = common_params.get('data_params', {})
 CONGRESS_YEAR_START = data_params.get('congress_year_start', 76)
@@ -60,7 +61,7 @@ os.makedirs("logs", exist_ok=True)
 CROSS_PERIOD_LOG_PATH = "logs/cross_period_evaluation_results.csv"
 
 # CSV header for cross-period results
-cross_period_header = "seed,train_year,test_year,accuracy,f1_score,auc\n"
+cross_period_header = "seed,train_year,test_year,accuracy,f1_score,auc,tn,fp,fn,tp\n"
 
 # Initialize log file
 if os.path.exists(CROSS_PERIOD_LOG_PATH):
@@ -317,7 +318,11 @@ def evaluate_on_test_congress(model, vectorizer, test_data, training_speaker_ids
         return {
             'accuracy': round(accuracy, 4),
             'f1_score': round(f1_score, 4),
-            'auc': round(auc_score, 4) if auc_score is not None else "NA"
+            'auc': round(auc_score, 4) if auc_score is not None else "NA",
+            'tn': int(cm[0, 0]),
+            'fp': int(cm[0, 1]), 
+            'fn': int(cm[1, 0]),
+            'tp': int(cm[1, 1])
         }
         
     except Exception as e:
@@ -412,7 +417,8 @@ def run_cross_period_evaluation():
                         # Log results
                         with open(CROSS_PERIOD_LOG_PATH, "a") as f:
                             f.write(f"{current_seed},{train_year},{test_year},"
-                                   f"{results['accuracy']},{results['f1_score']},{results['auc']}\n")
+                                f"{results['accuracy']},{results['f1_score']},{results['auc']},"
+                                f"{results['tn']},{results['fp']},{results['fn']},{results['tp']}\n")
                         
                         print(f"✅ Completed: {train_year} → {test_year}")
                     else:
