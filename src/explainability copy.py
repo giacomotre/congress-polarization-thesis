@@ -1,9 +1,7 @@
 import pickle
 import numpy as np
 import pandas as pd
-from collections import defaultdict
-import matplotlib.pyplot as plt
-import seaborn as sns
+from collections import defaultdict, Counter
 
 class PolarizationAnalysisPipeline:
     def __init__(self, pickle_path):
@@ -59,7 +57,7 @@ class PolarizationAnalysisPipeline:
         
         return self.aggregated_data
     
-    def analyze_partisan_distinctions(self, top_n=20):
+    def analyze_partisan_distinctions(self, top_n=15):
         """Step 3: Analyze top Republican vs Democrat distinguishing terms"""
         print(f"\nAnalyzing top {top_n} partisan distinguishing terms per congress...")
         
@@ -120,92 +118,84 @@ class PolarizationAnalysisPipeline:
             
             print(f"\nTOP REPUBLICAN-DISTINGUISHING TERMS:")
             print("  (Positive coefficients - algorithm associates these with Republicans)")
-            for i, term_data in enumerate(data['republican_terms'][:10], 1):
-                print(f"  {i:2d}. {term_data['term']:<15} (coeff: {term_data['coefficient']:+.3f})")
+            for i, term_data in enumerate(data['republican_terms'], 1):
+                print(f"  {i:2d}. {term_data['term']:<20} (coeff: {term_data['coefficient']:+.3f})")
             
             print(f"\nTOP DEMOCRAT-DISTINGUISHING TERMS:")
             print("  (Negative coefficients - algorithm associates these with Democrats)")
-            for i, term_data in enumerate(data['democrat_terms'][:10], 1):
-                print(f"  {i:2d}. {term_data['term']:<15} (coeff: {term_data['coefficient']:+.3f})")
+            for i, term_data in enumerate(data['democrat_terms'], 1):
+                print(f"  {i:2d}. {term_data['term']:<20} (coeff: {term_data['coefficient']:+.3f})")
     
-    def create_polarization_evolution_df(self):
-        """Create dataframe showing polarization evolution over time"""
+    def compare_words_across_years(self, start_congress, end_congress):
+        """Compare top 15 words between two congress ranges and show frequency"""
         if not self.polarization_analysis:
             print("Run analyze_partisan_distinctions() first!")
-            return None
+            return
         
-        evolution_data = []
+        # Filter congresses within the range
+        congress_range = [c for c in self.polarization_analysis.keys() 
+                         if start_congress <= c <= end_congress]
         
-        for congress_num in sorted(self.polarization_analysis.keys()):
+        if not congress_range:
+            print(f"No congress data found between {start_congress} and {end_congress}")
+            return
+        
+        # Collect all Republican and Democrat terms in the range
+        republican_words = []
+        democrat_words = []
+        
+        for congress_num in congress_range:
             data = self.polarization_analysis[congress_num]
             
-            evolution_data.append({
-                'congress': congress_num,
-                'strongest_republican_term': data['republican_terms'][0]['term'] if data['republican_terms'] else None,
-                'strongest_democrat_term': data['democrat_terms'][0]['term'] if data['democrat_terms'] else None
-            })
+            # Get top 15 terms for each party
+            rep_terms = [t['term'] for t in data['republican_terms'][:15]]
+            dem_terms = [t['term'] for t in data['democrat_terms'][:15]]
+            
+            republican_words.extend(rep_terms)
+            democrat_words.extend(dem_terms)
         
-        return pd.DataFrame(evolution_data)
+        # Count frequencies
+        rep_word_counts = Counter(republican_words)
+        dem_word_counts = Counter(democrat_words)
+        
+        print(f"\nWORD FREQUENCY ANALYSIS: CONGRESS {start_congress} to {end_congress}")
+        print("="*70)
+        print(f"Analyzed {len(congress_range)} congress sessions: {sorted(congress_range)}")
+        
+        print(f"\nREPUBLICAN-DISTINGUISHING WORDS (appeared multiple times):")
+        print("  Word                 Frequency")
+        print("  " + "-"*35)
+        rep_frequent = {word: count for word, count in rep_word_counts.items() if count > 1}
+        if rep_frequent:
+            for word, count in sorted(rep_frequent.items(), key=lambda x: x[1], reverse=True):
+                print(f"  {word:<20} {count}")
+        else:
+            print("  No words appeared multiple times")
+        
+        print(f"\nDEMOCRAT-DISTINGUISHING WORDS (appeared multiple times):")
+        print("  Word                 Frequency")
+        print("  " + "-"*35)
+        dem_frequent = {word: count for word, count in dem_word_counts.items() if count > 1}
+        if dem_frequent:
+            for word, count in sorted(dem_frequent.items(), key=lambda x: x[1], reverse=True):
+                print(f"  {word:<20} {count}")
+        else:
+            print("  No words appeared multiple times")
+        
+        # Summary statistics
+        print(f"\nSUMMARY:")
+        print(f"  Total unique Republican words: {len(rep_word_counts)}")
+        print(f"  Republican words appearing >1 time: {len(rep_frequent)}")
+        print(f"  Total unique Democrat words: {len(dem_word_counts)}")
+        print(f"  Democrat words appearing >1 time: {len(dem_frequent)}")
+        
+        return {
+            'republican_frequencies': dict(rep_word_counts),
+            'democrat_frequencies': dict(dem_word_counts),
+            'congress_range': congress_range
+        }
     
-    def compare_congress_polarization(self, congress1, congress2):
-        """Compare polarization between two specific congresses"""
-        if not self.polarization_analysis:
-            print("Run analyze_partisan_distinctions() first!")
-            return
-        
-        if congress1 not in self.polarization_analysis or congress2 not in self.polarization_analysis:
-            print(f"Congress {congress1} or {congress2} not found in data")
-            return
-        
-        data1 = self.polarization_analysis[congress1]
-        data2 = self.polarization_analysis[congress2]
-        
-        print(f"\nCOMPARING CONGRESS {congress1} vs CONGRESS {congress2}")
-        print("="*60)
-        
-        # Top terms comparison
-        print(f"\nTop Republican Terms Comparison:")
-        rep1_terms = [t['term'] for t in data1['republican_terms'][:5]]
-        rep2_terms = [t['term'] for t in data2['republican_terms'][:5]]
-        
-        print(f"  Congress {congress1}: {', '.join(rep1_terms)}")
-        print(f"  Congress {congress2}: {', '.join(rep2_terms)}")
-        
-        common_rep = set(rep1_terms) & set(rep2_terms)
-        if common_rep:
-            print(f"  Common terms: {', '.join(common_rep)}")
-        
-        print(f"\nTop Democrat Terms Comparison:")
-        dem1_terms = [t['term'] for t in data1['democrat_terms'][:5]]
-        dem2_terms = [t['term'] for t in data2['democrat_terms'][:5]]
-        
-        print(f"  Congress {congress1}: {', '.join(dem1_terms)}")
-        print(f"  Congress {congress2}: {', '.join(dem2_terms)}")
-        
-        common_dem = set(dem1_terms) & set(dem2_terms)
-        if common_dem:
-            print(f"  Common terms: {', '.join(common_dem)}")
-    
-    def get_polarization_trend_summary(self):
-        """Get summary of polarization trends"""
-        evolution_df = self.create_polarization_evolution_df()
-        
-        if len(evolution_df) < 2:
-            print("Need at least 2 congress sessions to analyze trends")
-            return
-        
-        print("\nPOLARIZATION TREND SUMMARY")
-        print("="*50)
-        
-        first_congress = evolution_df.iloc[0]
-        last_congress = evolution_df.iloc[-1]
-        
-        print(f"Period: Congress {first_congress['congress']} → Congress {last_congress['congress']}")
-        print(f"Analysis shows evolution in partisan language patterns over time")
-        
-        return evolution_df
-    
-    def run_polarization_pipeline(self, top_n=20):
+    def run_polarization_pipeline(self, top_n=15):
         """Run the complete polarization analysis pipeline"""
         print("RUNNING CONGRESSIONAL POLARIZATION ANALYSIS PIPELINE")
         print("="*70)
@@ -220,24 +210,20 @@ class PolarizationAnalysisPipeline:
         # Print detailed analysis
         self.print_partisan_comparison()
         
-        # Get trend summary
-        evolution_df = self.get_polarization_trend_summary()
-        
-        return self.polarization_analysis, evolution_df
+        return self.polarization_analysis
 
 # Usage example
 def main():
-    pipeline = PolarizationAnalysisPipeline("feature_importance\congress_feature_importance_bigram_100_min_df_svm06-06.pkl")
+    pipeline = PolarizationAnalysisPipeline("feature_importance/congress_feature_importance_bigram_100_min_df_svm06-06.pkl")
     
     # Run full analysis
-    analysis, evolution_df = pipeline.run_polarization_pipeline(top_n=20)
+    analysis = pipeline.run_polarization_pipeline(top_n=20)
     
-    # Optional: Compare specific congresses
-    if len(evolution_df) >= 2:
-        congress_list = sorted(evolution_df['congress'].tolist())
-        pipeline.compare_congress_polarization(congress_list[0], congress_list[-1])
+    # Example usage of word comparison function
+    # Compare words between congress 100 and 110
+    pipeline.compare_words_across_years(100, 110)
     
-    return pipeline, analysis, evolution_df
+    return pipeline, analysis
 
 if __name__ == "__main__":
-    pipeline, analysis, evolution_df = main()
+    pipeline, analysis = main()

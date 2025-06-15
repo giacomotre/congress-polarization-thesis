@@ -1,24 +1,26 @@
-name: nlp_polarization
+name: rapids_nlp_env 
 channels:
-  - defaults
-  - conda-forge
+  - rapidsai 
+  - nvidia 
+  - conda-forge 
+  - defaults 
 dependencies:
-  - python==3.11 #maybe to update the cuml may use a older version (3.9Y)
-  - numpy==1.24.4 #conflit with cuml
+  # --- Core Specifications ---
+  - python=3.10
+  - cudatoolkit=11.8
+
+  - rapids=24.04
+
+  # --- Standard Data Science & Utility Libraries from your imports ---
   - pandas
-  - scikit-learn
-  - nltk
-  - pip
+  - numpy
+  - scikit-learn 
+  - joblib
+  - matplotlib 
   - seaborn
-  - matplotlib
-  - torch
-  - transformers
-  - cudf==24.02
-  - cupy==12.0
-  - pip:
-    - transformers
-    - spacy==3.8.5
 
+  - jupyterlab 
+  - notebook 
 
-#python -m spacy download en_core_web_sm
-#python -m nltk.downloader punkt
+  # --- Pip ---
+  - pip
