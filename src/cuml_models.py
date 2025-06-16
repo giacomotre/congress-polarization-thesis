@@ -592,7 +592,7 @@ def save_feature_importance(feature_dict, model_type, output_dir="feature_import
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     
-    filename = output_path / f"congress_feature_importance_bigram_100_min_{model_type}.pkl"
+    filename = output_path / f"congress_feature_importance_bigram_100_min_df_{model_type}.pkl"
     
     with open(filename, 'wb') as f:
         pickle.dump(feature_dict, f)

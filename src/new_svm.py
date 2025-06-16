@@ -89,7 +89,7 @@ timing_csv_header_columns = [
 ]
 timing_csv_header = ",".join(timing_csv_header_columns) + "\n"
 
-for model_type, log_path in timing_log_paths.items(): # Using your globally defined timing_log_paths
+for model_type, log_path in timing_log_paths.items(): 
     if os.path.exists(log_path):
         os.remove(log_path)
         print(f"Deleted existing timing log file: {log_path}")
@@ -152,7 +152,7 @@ def run_model_pipeline(
         fold_scores = []
         fold_num = 0
         
-        for train_idx, val_idx in kf.split(X_train_val_combined_pd, y_train_val_encoded_pd_aligned): #how split devide this -> more advance
+        for train_idx, val_idx in kf.split(X_train_val_combined_pd, y_train_val_encoded_pd_aligned): 
             fold_num += 1
             X_train_fold_pd = X_train_val_combined_pd.iloc[train_idx]
             y_train_fold_pd = y_train_val_encoded_pd_aligned.iloc[train_idx]
@@ -166,7 +166,7 @@ def run_model_pipeline(
             try:
                 cv_tfidf_vectorizer = TfidfVectorizer(
                     vocabulary=fixed_vocabulary_dict,
-                    ngram_range=(1, 2),       # The fixed vocab defines the n-grams CHANGEEEE
+                    ngram_range=(1, 2),       # The fixed vocab defines the n-grams CHANGE
                     lowercase=False,          # Assuming SpaCy handled this
                     stop_words=None,          # Assuming SpaCy handled this
                     **current_tfidf_params_for_cv # Add this if you ARE tuning other TF-IDF params
@@ -225,8 +225,8 @@ def run_model_pipeline(
     best_model_params_final = {k.split('__')[1]: v for k, v in best_params.items() if k.startswith('model__')}
 
     final_tfidf_vectorizer = TfidfVectorizer(
-    vocabulary=fixed_vocabulary_dict, # This is passed to run_model_pipeline
-    ngram_range=(1, 2), #CHANGEEEE
+    vocabulary=fixed_vocabulary_dict, 
+    ngram_range=(1, 2), #CHANGE
     lowercase=False,
     stop_words=None,
     **tuned_tfidf_params_final # This will include the best 'use_idf' and 'norm'
