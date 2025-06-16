@@ -6,24 +6,21 @@ common:
     test_size: 0.15
     validation_size: 0.25
     random_state: 42
-    seeds: [42, 123, 789] #, 123, 789
+    seeds: [42, 123, 789] 
 
   data_params:
     congress_year_start: 76
-    congress_year_end: 111 # is included
+    congress_year_end: 78 # is included
 
   party_map:
     D: 0 # Democrat
     R: 1 # Republican
 
 # --- Common TF-IDF Settings and Tuning Grids (FOR FIXED VOCABULARY) ---
-# Define an anchor '&common_tfidf_config' for these settings
 common_tfidf_config: &common_tfidf_config
-  # Hyperparameter Grids for Tuning TF-IDF scoring parameters (with fixed vocabulary)
   #tfidf_use_idf_grid: [True, False]
   tfidf_norm_grid: ['l1', 'l2'] # None means no normalization
   svm_class_weight_grid: [null, 'balanced'] #class wieght
-  # You could add other tunable TF-IDF params if desired, e.g.:
   # tfidf_sublinear_tf_grid: [True, False]
 
 # --- Model Specific Parameters and Tuning Grids ---
@@ -33,8 +30,6 @@ bayes:
   # Bayes-specific parameters
   bayes_alpha_grid: [0.1, 0.5, 1.0]
   #already balance calss weght
-  # Example: If Bayes specifically should not tune 'norm' or use a different grid:
-  # tfidf_norm_grid: ['l2'] # This would override the common one for Bayes only
 
 svm:
   <<: *common_tfidf_config # Merges all keys from common_tfidf_config here
