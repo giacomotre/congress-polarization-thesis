@@ -46,15 +46,15 @@ def process_spacy_doc(doc):
         if token_in_entity_to_remove:
             continue
 
-# Updated function to handle te expection
+        # DEBUGGING 
+        if token.text.lower() in ['republicans', 'democrats', 'spending', 'administrations']:
+            print(f"Token: '{token.text}' → Lemma: '{token.lemma_}' | POS: {token.pos_} | Is_alpha: {token.is_alpha}")
 
         if (not token.is_stop and
             not token.is_punct and
-            # not token.is_digit and # is_alpha will handle this
-            # not token.like_num and # is_alpha will handle this
             not token.is_currency and
-            token.is_alpha and  # <-- ADD THIS: Ensures only A-Z
-            len(token.lemma_) > 1 and # <-- ADD THIS: Min length 2
+            token.is_alpha and  # Ensures only A-Z
+            len(token.lemma_) > 1 and # change this to Min length 2 if you want to increase the min number of letter 
             token.text.strip() != ''):
             
             lemma = token.lemma_.lower().strip()
@@ -127,8 +127,8 @@ if __name__ == '__main__':
         exit()
         
     # --- Main Processing Loop ---
-    CONGRESS_RANGE = range(109, 112) # Example: 76-112 prova prova nuovo token
-    batch_size = 1024 #VRAM usage 20 out of 40, could increase to 2.560)
+    CONGRESS_RANGE = range(104, 104) # Example: 76-112 
+    batch_size = 1024 #VRAM usage 20 out of 40, could increase to 2.560
     n_processes = 1 # Use -1 for all cores, or a specific number > 1 for multiprocessing
 
     base_dir = SCRIPT_DIR / "../data/merged"

@@ -22,6 +22,7 @@ common_tfidf_config: &common_tfidf_config
   # Hyperparameter Grids for Tuning TF-IDF scoring parameters (with fixed vocabulary)
   #tfidf_use_idf_grid: [True, False]
   tfidf_norm_grid: ['l1', 'l2'] # None means no normalization
+  svm_class_weight_grid: [null, 'balanced'] #class wieght
   # You could add other tunable TF-IDF params if desired, e.g.:
   # tfidf_sublinear_tf_grid: [True, False]
 

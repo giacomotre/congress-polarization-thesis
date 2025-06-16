@@ -119,7 +119,8 @@ def run_model_pipeline(
     #'tfidf__use_idf': model_config.get("tfidf_use_idf_grid", [True, False]),
     
     if model_type == 'svm':
-        model_specific_grid['model__C'] = model_config.get('C_grid', [1.0]) 
+        model_specific_grid['model__C'] = model_config.get('C_grid', [1.0])
+        model_specific_grid['model__class_weight'] = model_config.get('svm_class_weight_grid', [None, 'balanced'])
         
     param_combinations.update(model_specific_grid)
     grid = ParameterGrid(param_combinations)
