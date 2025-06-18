@@ -19,11 +19,14 @@ from tqdm import tqdm
 # These are safe to define at the top level as they don't execute process-creating code on import.
 SCRIPT_DIR = Path(__file__).resolve().parent
 
+# Words to remove (in addition to entities, stop words, etc.)
+WORDS_TO_REMOVE = {"gentleman", "committee", "chairman", "time", "speaker"}
+
 def process_spacy_doc(doc):
     """
     Processes a single SpaCy Doc object to extract cleaned, lemmatized tokens
     after removing specified entities, stop words, punctuation, digits,
-    currency symbols, and the phrase "mr speaker".
+    currency symbols, and specific words.
     """
     if not doc or not doc.has_annotation("SENT_START"):
         return []
@@ -61,11 +64,17 @@ def process_spacy_doc(doc):
             if lemma and lemma.isalpha() and len(lemma) > 1: # Double check lemma too
                 intermediate_lemmas.append(lemma)
     
-    # Second pass: Remove "mr speaker" / "mister speaker" sequences
+    # Second pass: Remove specific words and "mr speaker" / "mister speaker" sequences
     final_tokens = []
     i = 0
     while i < len(intermediate_lemmas):
         current_lemma = intermediate_lemmas[i]
+        
+        # Remove specific words
+        if current_lemma in WORDS_TO_REMOVE:
+            i += 1
+            continue
+        
         # Normalize "mr." to "mr" for checking, also handle "mister"
         is_mr_or_mister = (current_lemma.rstrip('.') == "mr" or current_lemma == "mister")
 
