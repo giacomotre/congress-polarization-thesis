@@ -3,6 +3,7 @@ import pandas as pd
 import joblib
 import json
 import time
+import csv
 import pickle
 import numpy as np
 from pathlib import Path
@@ -57,6 +58,7 @@ model_configs = {
 
 #define outputs path 
 os.makedirs("logs", exist_ok=True)
+os.makedirs("predictions", exist_ok=True)
 
 detailed_log_paths = {
     'svm': "logs/tfidf_svm_performance_detailed.csv",
@@ -69,6 +71,15 @@ model_plotting_info = {
 timing_log_paths = {
     'svm': "logs/svm_timing_log.csv",
 }
+
+predictions_file_path = "predictions/svm_predictions_with_speech_ids.csv"
+
+#prediction header
+predictions_header = ["speech_id", "congress_year", "seed", "true_label", "predicted_label", "decision_score"]
+if not os.path.exists(predictions_file_path):
+    with open(predictions_file_path, "w", newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(predictions_header)
 
 # detail csv file header
 detailed_csv_header_columns = ["seed", "year", "accuracy", "f1_score", "auc", "tn", "fp", "fn", "tp", "model_C", "tfidf_norm"]
@@ -103,7 +114,8 @@ def run_model_pipeline(
     X_test_pd: pd.Series, y_test_encoded_pd: pd.Series,
     model_type: str, model_config: dict, random_state: int, congress_year: str, party_map: dict,
     model_plot_output_dir: str,
-    fixed_vocabulary_dict: dict
+    fixed_vocabulary_dict: dict, 
+    test_speech_ids: list
 ):
     print(f"\n --- Running {model_type.upper()} pipeline [Fixed Vocabulary] for Congress {congress_year} with seed {random_state} ---")
     
@@ -284,6 +296,32 @@ def run_model_pipeline(
 
     # Get predictions (already on GPU)
     y_test_pred_eval = final_model_instance.predict(X_test_final_tfidf_eval)
+    
+    # Get decision scores for confidence measure
+    if hasattr(final_model_instance, "decision_function"):
+        decision_scores_for_save = final_model_instance.decision_function(X_test_final_tfidf_eval)
+    else:
+        decision_scores_for_save = [0.0] * len(y_test_pred_eval)
+
+    # Save predictions with speech_ids
+    print("Saving predictions with speech_ids...")
+    predictions_to_save = []
+    for i, speech_id in enumerate(test_speech_ids):
+        predictions_to_save.append([
+            speech_id,
+            congress_year,
+            random_state,
+            int(y_test_encoded_pd.iloc[i]),  # true label
+            int(y_test_pred_eval[i]),        # predicted label
+            float(decision_scores_for_save[i]) if hasattr(decision_scores_for_save, '__len__') else float(decision_scores_for_save)
+        ])
+
+    # Append to predictions file
+    with open("predictions/svm_predictions_with_speech_ids.csv", "a", newline='') as f:
+        writer = csv.writer(f)
+        writer.writerows(predictions_to_save)
+
+    print(f"Saved {len(predictions_to_save)} predictions for Congress {congress_year}, seed {random_state}")
 
     # --- Calculate target_names_eval (Moved Earlier) ---
     try:
@@ -547,6 +585,9 @@ if __name__ == "__main__":
                 train_df = df_full[df_full["speakerid"].isin(train_speakers)].reset_index(drop=True)
                 val_df = df_full[df_full["speakerid"].isin(val_speakers)].reset_index(drop=True) if len(val_speakers) > 0 else pd.DataFrame(columns=df_full.columns)
                 test_df = df_full[df_full["speakerid"].isin(test_speakers)].reset_index(drop=True)
+                
+                # Preserve speech_ids for test set
+                test_speech_ids = test_df["speech_id"].tolist()
 
                 split_time = time.time() - start_time_split
                 print(f"Split complete in {split_time:.2f} secs. Train spk: {len(train_speakers)}, Val spk: {len(val_speakers)}, Test spk: {len(test_speakers)}")
@@ -615,7 +656,8 @@ if __name__ == "__main__":
                         congress_year=year_str,
                         party_map=PARTY_MAP,
                         model_plot_output_dir=current_model_plot_dir,
-                        fixed_vocabulary_dict=fixed_sklearn_vocabulary
+                        fixed_vocabulary_dict=fixed_sklearn_vocabulary,
+                        test_speech_ids=test_speech_ids
                     )
             except Exception as e:
                 print(f"❌ An error occurred during processing for Congress {year_str} with seed {seed}: {e}")

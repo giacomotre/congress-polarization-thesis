@@ -10,7 +10,7 @@ common:
 
   data_params:
     congress_year_start: 76
-    congress_year_end: 86 # is included
+    congress_year_end: 78 # is included
 
   party_map:
     D: 0 # Democrat
