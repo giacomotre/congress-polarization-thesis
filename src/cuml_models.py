@@ -132,65 +132,8 @@ for model_type, log_path in timing_log_paths.items(): # Using your globally defi
         f.write(timing_csv_header)
         
 
-def extract_model_parameters(best_params, model_type):
-    """Extract individual parameters from best_params dictionary based on model type"""
-    
-    extracted_params = {}
-    
-    # Common TF-IDF parameters (both models have this)
-    if 'tfidf__norm' in best_params:
-        extracted_params['tfidf_norm'] = best_params['tfidf__norm']
-    elif 'tfidf_norm' in best_params:
-        extracted_params['tfidf_norm'] = best_params['tfidf_norm']
-    else:
-        extracted_params['tfidf_norm'] = 'l2'  # Default
-    
-    # Model-specific parameters
-    if model_type == 'bayes':
-        # Extract Naive Bayes alpha parameter
-        if 'model__alpha' in best_params:
-            extracted_params['bayes_alpha'] = best_params['model__alpha']
-        elif 'bayes_alpha' in best_params:
-            extracted_params['bayes_alpha'] = best_params['bayes_alpha']
-        else:
-            extracted_params['bayes_alpha'] = 1.0  # Default
-            
-    elif model_type == 'lr':
-        # Extract Logistic Regression C parameter
-        if 'model__C' in best_params:
-            extracted_params['lr_C'] = best_params['model__C']
-        elif 'lr_C' in best_params:
-            extracted_params['lr_C'] = best_params['lr_C']
-        else:
-            extracted_params['lr_C'] = 1.0  # Default
-        
-        # Extract max_iter parameter
-        if 'model__max_iter' in best_params:
-            extracted_params['lr_max_iter'] = best_params['model__max_iter']
-        elif 'lr_max_iter' in best_params:
-            extracted_params['lr_max_iter'] = best_params['lr_max_iter']
-        else:
-            extracted_params['lr_max_iter'] = 1000  # Default
-        
-        # Extract penalty parameter
-        if 'model__penalty' in best_params:
-            extracted_params['lr_penalty'] = best_params['model__penalty']
-        elif 'lr_penalty' in best_params:
-            extracted_params['lr_penalty'] = best_params['lr_penalty']
-        else:
-            extracted_params['lr_penalty'] = 'l2'  # Default
-        
-        # Extract class_weight parameter
-        if 'model__class_weight' in best_params:
-            extracted_params['lr_class_weight'] = best_params['model__class_weight']
-        elif 'lr_class_weight' in best_params:
-            extracted_params['lr_class_weight'] = best_params['lr_class_weight']
-        else:
-            extracted_params['lr_class_weight'] = None  # Default
-    
-    return extracted_params
+# Replace your run_model_pipeline function with this fixed version:
 
-# --- Define model function ---
 def run_model_pipeline(
     X_train_pd: pd.Series, y_train_encoded_pd: pd.Series,
     X_val_pd: pd.Series, y_val_encoded_pd: pd.Series,
@@ -203,6 +146,15 @@ def run_model_pipeline(
     print(f"\n --- Running {model_type.upper()} pipeline [Manual Tuning] for Congress {congress_year} with seed {random_state} ---")
     timing = {}
     start_time_total = time.time()
+    
+    # Initialize variables early to avoid UnboundLocalError
+    y_test_pred_gpu_eval = None
+    probability_scores_gpu = None
+    decision_scores_gpu = None
+    final_model_instance = None
+    final_tfidf_vectorizer = None
+    X_train_val_final_tfidf_gpu = None
+    X_test_final_tfidf_gpu_eval = None
     
     # loading optimization config
     model_specific_grid = {}
@@ -361,7 +313,6 @@ def run_model_pipeline(
     **best_tfidf_params_final # This will include the best 'use_idf' and 'norm'
     ) 
     X_train_val_final_tfidf_gpu = final_tfidf_vectorizer.fit_transform(X_train_val_final_cudf)
-    final_model_instance = None # To ensure it's defined for del
 
     if model_type == 'bayes':
         final_model_instance = ComplementNB(**best_model_params_final)
@@ -400,9 +351,9 @@ def run_model_pipeline(
     if X_test_pd.empty:
         print("Error: Test data (X_test_pd) is empty.")
         # Cleanup before returning
-        if 'X_train_val_final_tfidf_gpu' in locals(): del X_train_val_final_tfidf_gpu
-        if 'final_tfidf_vectorizer' in locals(): del final_tfidf_vectorizer
-        if 'final_model_instance' in locals(): del final_model_instance
+        if X_train_val_final_tfidf_gpu is not None: del X_train_val_final_tfidf_gpu
+        if final_tfidf_vectorizer is not None: del final_tfidf_vectorizer
+        if final_model_instance is not None: del final_model_instance
         if 'X_train_val_final_cudf' in locals(): del X_train_val_final_cudf
         if 'y_train_val_final_cupy' in locals(): del y_train_val_final_cupy
         cupy.get_default_memory_pool().free_all_blocks()
@@ -424,11 +375,9 @@ def run_model_pipeline(
     final_f1_weighted_eval = 0.0 # now calculate not available
     auc_eval = None
     cm_cpu_eval = None # Initialize cm_cpu_eval
-    probability_scores_gpu = None # Initialize for cleanup
-    decision_scores_gpu = None # Initialize for cleanup
     classification_report_dict = {} # Initialize for classification report
 
-    # Get predictions (already on GPU)
+    # Get predictions (already on GPU) - INITIALIZE HERE
     y_test_pred_gpu_eval = final_model_instance.predict(X_test_final_tfidf_gpu_eval)
     
     # Transfer necessary data from GPU (CuPy arrays) to CPU (NumPy arrays) for scikit-learn metrics
@@ -452,24 +401,15 @@ def run_model_pipeline(
     # Calculate metrics using cuML and scikit-learn
     try:
         # Accuracy (cuML)
-        # Ensure y_test_pred_gpu_eval is available before using it
-        if 'y_test_pred_gpu_eval' in locals() and y_test_pred_gpu_eval is not None:
-            final_accuracy_gpu = cuml_accuracy_score(y_test_encoded_gpu_eval, y_test_pred_gpu_eval)
-            final_accuracy_eval = cupy.asnumpy(final_accuracy_gpu).item() if final_accuracy_gpu is not None else 0.0
-        else:
-            print("Warning: y_test_pred_gpu_eval not available for accuracy calculation.")
-            final_accuracy_eval = 0.0
+        final_accuracy_gpu = cuml_accuracy_score(y_test_encoded_gpu_eval, y_test_pred_gpu_eval)
+        final_accuracy_eval = cupy.asnumpy(final_accuracy_gpu).item() if final_accuracy_gpu is not None else 0.0
 
         # F1 Score (Weighted) using scikit-learn
         final_f1_weighted_eval = sklearn_f1_score(y_test_encoded_cpu, y_test_pred_cpu, average='weighted', zero_division=0)
         
         # Confusion Matrix (cuML)
-        if 'y_test_pred_gpu_eval' in locals() and y_test_pred_gpu_eval is not None:
-            cm_gpu_eval_calc = cuml_confusion_matrix(y_test_encoded_gpu_eval, y_test_pred_gpu_eval, convert_dtype=True)
-            cm_cpu_eval = cupy.asnumpy(cm_gpu_eval_calc) if cm_gpu_eval_calc is not None else np.array([])
-        else:
-            print("Warning: y_test_pred_gpu_eval not available for confusion matrix calculation.")
-            cm_cpu_eval = np.array([])
+        cm_gpu_eval_calc = cuml_confusion_matrix(y_test_encoded_gpu_eval, y_test_pred_gpu_eval, convert_dtype=True)
+        cm_cpu_eval = cupy.asnumpy(cm_gpu_eval_calc) if cm_gpu_eval_calc is not None else np.array([])
 
         # ROC-AUC Score (Binary Classification)
         if hasattr(final_model_instance, "predict_proba"):
@@ -504,7 +444,6 @@ def run_model_pipeline(
         classification_report_dict = {}
 
     # Cleanup GPU arrays used for metrics if no longer needed
-    if 'y_test_pred_gpu_eval' in locals(): del y_test_pred_gpu_eval
     if probability_scores_gpu is not None: del probability_scores_gpu
     if decision_scores_gpu is not None: del decision_scores_gpu
     
@@ -541,7 +480,7 @@ def run_model_pipeline(
         print(f"Warning: Could not get probability/decision scores: {e}")
         prob_scores_cpu = [0.5] * len(test_speech_ids)
 
-    # Convert predictions to CPU for saving
+    # Convert predictions to CPU for saving - y_test_pred_gpu_eval is now guaranteed to exist
     y_test_pred_cpu_for_save = cupy.asnumpy(y_test_pred_gpu_eval)
 
     # Save predictions with speech_ids
@@ -640,14 +579,15 @@ def run_model_pipeline(
     # Cleanup remaining major variables from this pipeline run
     if 'X_train_val_final_cudf' in locals(): del X_train_val_final_cudf
     if 'y_train_val_final_cupy' in locals(): del y_train_val_final_cupy
-    if 'X_train_val_final_tfidf_gpu' in locals(): del X_train_val_final_tfidf_gpu
+    if X_train_val_final_tfidf_gpu is not None: del X_train_val_final_tfidf_gpu
     
     if 'X_test_cudf_eval' in locals(): del X_test_cudf_eval
-    if 'X_test_final_tfidf_gpu_eval' in locals(): del X_test_final_tfidf_gpu_eval
+    if X_test_final_tfidf_gpu_eval is not None: del X_test_final_tfidf_gpu_eval
     if 'y_test_encoded_gpu_eval' in locals(): del y_test_encoded_gpu_eval # Clean up the GPU array for y_test
 
-    if 'final_tfidf_vectorizer' in locals(): del final_tfidf_vectorizer
-    if 'final_model_instance' in locals(): del final_model_instance
+    if final_tfidf_vectorizer is not None: del final_tfidf_vectorizer
+    if final_model_instance is not None: del final_model_instance
+    if y_test_pred_gpu_eval is not None: del y_test_pred_gpu_eval
 
     cupy.get_default_memory_pool().free_all_blocks()
 
