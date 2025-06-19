@@ -431,54 +431,6 @@ def run_model_pipeline(
     # Get predictions (already on GPU)
     y_test_pred_gpu_eval = final_model_instance.predict(X_test_final_tfidf_gpu_eval)
     
-    # Get probability scores for confidence measure
-    try:
-        if hasattr(final_model_instance, "predict_proba"):
-            probability_scores_gpu_for_save = final_model_instance.predict_proba(X_test_final_tfidf_gpu_eval)
-            # Get probability for positive class (class 1)
-            prob_scores_cpu = cupy.asnumpy(probability_scores_gpu_for_save[:, 1])
-        elif hasattr(final_model_instance, "decision_function"):
-            decision_scores_gpu_for_save = final_model_instance.decision_function(X_test_final_tfidf_gpu_eval)
-            prob_scores_cpu = cupy.asnumpy(decision_scores_gpu_for_save)
-        else:
-            prob_scores_cpu = [0.5] * len(test_speech_ids)  # Default neutral probability
-    except Exception as e:
-        print(f"Warning: Could not get probability/decision scores: {e}")
-        prob_scores_cpu = [0.5] * len(test_speech_ids)
-
-    # Convert predictions to CPU for saving
-    y_test_pred_cpu_for_save = cupy.asnumpy(y_test_pred_gpu_eval)
-
-    # Save predictions with speech_ids
-    print("Saving predictions with speech_ids...")
-    predictions_to_save = []
-    for i, speech_id in enumerate(test_speech_ids):
-        predictions_to_save.append([
-            speech_id,
-            congress_year,
-            random_state,
-            int(y_test_encoded_cpu[i]),           # true label (already on CPU)
-            int(y_test_pred_cpu_for_save[i]),     # predicted label
-            float(prob_scores_cpu[i])             # probability/decision score
-        ])
-
-    # Determine the correct predictions file path
-    predictions_file_path = f"predictions/{model_type}_predictions_with_speech_ids.csv"
-
-    # Append to predictions file
-    with open(predictions_file_path, "a", newline='') as f:
-        writer = csv.writer(f)
-        writer.writerows(predictions_to_save)
-
-    print(f"Saved {len(predictions_to_save)} predictions for Congress {congress_year}, seed {random_state} ({model_type.upper()})")
-
-    # Cleanup the additional variables
-    del prob_scores_cpu, y_test_pred_cpu_for_save
-    if 'probability_scores_gpu_for_save' in locals():
-        del probability_scores_gpu_for_save
-    if 'decision_scores_gpu_for_save' in locals():
-        del decision_scores_gpu_for_save
-    
     # Transfer necessary data from GPU (CuPy arrays) to CPU (NumPy arrays) for scikit-learn metrics
     y_test_encoded_cpu = cupy.asnumpy(y_test_encoded_gpu_eval)
     y_test_pred_cpu = cupy.asnumpy(y_test_pred_gpu_eval)
@@ -573,6 +525,54 @@ def run_model_pipeline(
     if cm_cpu_eval is not None and cm_cpu_eval.size > 0: print("Confusion Matrix:\n", cm_cpu_eval)
 
     print("-" * 25)
+    
+    # Get probability scores for confidence measure
+    try:
+        if hasattr(final_model_instance, "predict_proba"):
+            probability_scores_gpu_for_save = final_model_instance.predict_proba(X_test_final_tfidf_gpu_eval)
+            # Get probability for positive class (class 1)
+            prob_scores_cpu = cupy.asnumpy(probability_scores_gpu_for_save[:, 1])
+        elif hasattr(final_model_instance, "decision_function"):
+            decision_scores_gpu_for_save = final_model_instance.decision_function(X_test_final_tfidf_gpu_eval)
+            prob_scores_cpu = cupy.asnumpy(decision_scores_gpu_for_save)
+        else:
+            prob_scores_cpu = [0.5] * len(test_speech_ids)  # Default neutral probability
+    except Exception as e:
+        print(f"Warning: Could not get probability/decision scores: {e}")
+        prob_scores_cpu = [0.5] * len(test_speech_ids)
+
+    # Convert predictions to CPU for saving
+    y_test_pred_cpu_for_save = cupy.asnumpy(y_test_pred_gpu_eval)
+
+    # Save predictions with speech_ids
+    print("Saving predictions with speech_ids...")
+    predictions_to_save = []
+    for i, speech_id in enumerate(test_speech_ids):
+        predictions_to_save.append([
+            speech_id,
+            congress_year,
+            random_state,
+            int(y_test_encoded_cpu[i]),           # true label (already on CPU)
+            int(y_test_pred_cpu_for_save[i]),     # predicted label
+            float(prob_scores_cpu[i])             # probability/decision score
+        ])
+
+    # Determine the correct predictions file path
+    predictions_file_path = f"predictions/{model_type}_predictions_with_speech_ids.csv"
+
+    # Append to predictions file
+    with open(predictions_file_path, "a", newline='') as f:
+        writer = csv.writer(f)
+        writer.writerows(predictions_to_save)
+
+    print(f"Saved {len(predictions_to_save)} predictions for Congress {congress_year}, seed {random_state} ({model_type.upper()})")
+
+    # Cleanup the additional variables
+    del prob_scores_cpu, y_test_pred_cpu_for_save
+    if 'probability_scores_gpu_for_save' in locals():
+        del probability_scores_gpu_for_save
+    if 'decision_scores_gpu_for_save' in locals():
+        del decision_scores_gpu_for_save
 
     # In the run_model_pipeline function, update the result_json creation:
     result_json = {
