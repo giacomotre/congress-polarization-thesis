@@ -6,6 +6,7 @@ import joblib
 import json
 import time
 import pickle
+import csv
 import numpy as np
 from pathlib import Path
 
@@ -67,6 +68,7 @@ model_configs = {
 
 #define outputs path 
 os.makedirs("logs", exist_ok=True)
+os.makedirs("predictions", exist_ok=True)
 
 detailed_log_paths = {
     'bayes': "logs/tfidf_bayes_performance_detailed.csv",
@@ -83,11 +85,25 @@ timing_log_paths = {
     'lr': "logs/lr_timing_log.csv"
 }
 
+predictions_file_paths = {
+    'bayes': "predictions/bayes_predictions_with_speech_ids.csv",
+    'lr': "predictions/lr_predictions_with_speech_ids.csv"
+}
+
 # detail csv file header
 detailed_csv_headers = {
     'bayes': ["seed", "year", "accuracy", "f1_score", "auc", "tn", "fp", "fn", "tp", "bayes_alpha", "tfidf_norm"],
     'lr': ["seed", "year", "accuracy", "f1_score", "auc", "tn", "fp", "fn", "tp", "lr_C", "lr_max_iter", "lr_penalty", "lr_class_weight", "tfidf_norm"]
 }
+
+predictions_header = ["speech_id", "congress_year", "seed", "true_label", "predicted_label", "probability_score"]
+
+#predictions header
+for model_type, file_path in predictions_file_paths.items():
+    if not os.path.exists(file_path):
+        with open(file_path, "w", newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(predictions_header)
 
 # Replace your current header creation loop with this:
 for model_type, log_path in detailed_log_paths.items():
@@ -181,7 +197,8 @@ def run_model_pipeline(
     X_test_pd: pd.Series, y_test_encoded_pd: pd.Series,
     model_type: str, model_config: dict, random_state: int, congress_year: str, party_map: dict,
     model_plot_output_dir: str, 
-    fixed_vocabulary_dict: cudf.Series
+    fixed_vocabulary_dict: cudf.Series,
+    test_speech_ids: list
 ):
     print(f"\n --- Running {model_type.upper()} pipeline [Manual Tuning] for Congress {congress_year} with seed {random_state} ---")
     timing = {}
@@ -413,6 +430,54 @@ def run_model_pipeline(
 
     # Get predictions (already on GPU)
     y_test_pred_gpu_eval = final_model_instance.predict(X_test_final_tfidf_gpu_eval)
+    
+    # Get probability scores for confidence measure
+    try:
+        if hasattr(final_model_instance, "predict_proba"):
+            probability_scores_gpu_for_save = final_model_instance.predict_proba(X_test_final_tfidf_gpu_eval)
+            # Get probability for positive class (class 1)
+            prob_scores_cpu = cupy.asnumpy(probability_scores_gpu_for_save[:, 1])
+        elif hasattr(final_model_instance, "decision_function"):
+            decision_scores_gpu_for_save = final_model_instance.decision_function(X_test_final_tfidf_gpu_eval)
+            prob_scores_cpu = cupy.asnumpy(decision_scores_gpu_for_save)
+        else:
+            prob_scores_cpu = [0.5] * len(test_speech_ids)  # Default neutral probability
+    except Exception as e:
+        print(f"Warning: Could not get probability/decision scores: {e}")
+        prob_scores_cpu = [0.5] * len(test_speech_ids)
+
+    # Convert predictions to CPU for saving
+    y_test_pred_cpu_for_save = cupy.asnumpy(y_test_pred_gpu_eval)
+
+    # Save predictions with speech_ids
+    print("Saving predictions with speech_ids...")
+    predictions_to_save = []
+    for i, speech_id in enumerate(test_speech_ids):
+        predictions_to_save.append([
+            speech_id,
+            congress_year,
+            random_state,
+            int(y_test_encoded_cpu[i]),           # true label (already on CPU)
+            int(y_test_pred_cpu_for_save[i]),     # predicted label
+            float(prob_scores_cpu[i])             # probability/decision score
+        ])
+
+    # Determine the correct predictions file path
+    predictions_file_path = f"predictions/{model_type}_predictions_with_speech_ids.csv"
+
+    # Append to predictions file
+    with open(predictions_file_path, "a", newline='') as f:
+        writer = csv.writer(f)
+        writer.writerows(predictions_to_save)
+
+    print(f"Saved {len(predictions_to_save)} predictions for Congress {congress_year}, seed {random_state} ({model_type.upper()})")
+
+    # Cleanup the additional variables
+    del prob_scores_cpu, y_test_pred_cpu_for_save
+    if 'probability_scores_gpu_for_save' in locals():
+        del probability_scores_gpu_for_save
+    if 'decision_scores_gpu_for_save' in locals():
+        del decision_scores_gpu_for_save
     
     # Transfer necessary data from GPU (CuPy arrays) to CPU (NumPy arrays) for scikit-learn metrics
     y_test_encoded_cpu = cupy.asnumpy(y_test_encoded_gpu_eval)
@@ -679,6 +744,9 @@ if __name__ == "__main__":
                 train_df = df_full[df_full["speakerid"].isin(train_speakers)].reset_index(drop=True)
                 val_df = df_full[df_full["speakerid"].isin(val_speakers)].reset_index(drop=True) if len(val_speakers) > 0 else pd.DataFrame(columns=df_full.columns)
                 test_df = df_full[df_full["speakerid"].isin(test_speakers)].reset_index(drop=True)
+                
+                # Preserve speech_ids for test set
+                test_speech_ids = test_df["speech_id"].tolist()
 
                 split_time = time.time() - start_time_split
                 print(f"Split complete in {split_time:.2f} secs. Train spk: {len(train_speakers)}, Val spk: {len(val_speakers)}, Test spk: {len(test_speakers)}")
@@ -747,7 +815,8 @@ if __name__ == "__main__":
                         congress_year=year_str,
                         party_map=PARTY_MAP,
                         model_plot_output_dir=current_model_plot_dir,
-                        fixed_vocabulary_dict=fixed_cuml_vocabulary_terms
+                        fixed_vocabulary_dict=fixed_cuml_vocabulary_terms,
+                        test_speech_ids=test_speech_ids
                     )
             except Exception as e:
                 print(f"❌ An error occurred during processing for Congress {year_str} with seed {seed}: {e}")
