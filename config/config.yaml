@@ -10,7 +10,7 @@ common:
 
   data_params:
     congress_year_start: 76
-    congress_year_end: 77 # is included
+    congress_year_end: 111 # is included
 
   party_map:
     D: 0 # Democrat
@@ -28,7 +28,7 @@ common_tfidf_config: &common_tfidf_config
 bayes:
   <<: *common_tfidf_config # Merges all keys from common_tfidf_config here
   # Bayes-specific parameters
-  bayes_alpha_grid: [0.1, 0.5, 1.0]
+  bayes_alpha_grid: [0.5, 1.0, 2.0]
   #already balance calss weght
 
 svm:
