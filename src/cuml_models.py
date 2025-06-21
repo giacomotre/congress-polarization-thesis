@@ -25,13 +25,30 @@ from cuml.metrics import accuracy_score as cuml_accuracy_score
 from cuml.metrics import confusion_matrix as cuml_confusion_matrix
 from cuml.metrics import roc_auc_score as cuml_roc_auc_score # Add this
 from sklearn.metrics import f1_score as sklearn_f1_score
-from sklearn.metrics import classification_report # Add this line
-
+from sklearn.metrics import classification_report # Fixed import
 
 # Import utility functions
 from config_loader import load_config
 from pipeline_utils import encode_labels_with_map
 from plotting_utils import plot_performance_metrics
+
+# ADD THE MISSING FUNCTION
+def extract_model_parameters(best_params, model_type):
+    """Extract model-specific parameters from best_params dictionary"""
+    extracted = {}
+    
+    # Extract TF-IDF parameters (common to both models)
+    extracted['tfidf_norm'] = best_params.get('tfidf__norm', 'l2')
+    
+    if model_type == 'bayes':
+        extracted['bayes_alpha'] = best_params.get('model__alpha', 1.0)
+    elif model_type == 'lr':
+        extracted['lr_C'] = best_params.get('model__C', 1.0)
+        extracted['lr_max_iter'] = best_params.get('model__max_iter', 1000)
+        extracted['lr_penalty'] = best_params.get('model__penalty', 'l2')
+        extracted['lr_class_weight'] = best_params.get('model__class_weight', None)
+    
+    return extracted
 
 # ------ Loading Unified Config -------
 CONFIG_PATH_UNIFIED = Path(__file__).resolve().parent.parent / "config" / "config.yaml"
@@ -58,7 +75,6 @@ CONGRESS_YEAR_END = data_params.get('congress_year_end', 112)
 PARTY_MAP = common_params.get('party_map', {})
 if not PARTY_MAP or not all(party in PARTY_MAP for party in ['D', 'R']):
     print("Warning: PARTY_MAP in config is missing or incomplete. Ensure D and R are mapped.")
-
 
 # --- Define Model Configurations Dictionary ---
 model_configs = {
@@ -130,9 +146,6 @@ for model_type, log_path in timing_log_paths.items(): # Using your globally defi
         print(f"Deleted existing timing log file: {log_path}")
     with open(log_path, "w") as f:
         f.write(timing_csv_header)
-        
-
-# Replace your run_model_pipeline function with this fixed version:
 
 def run_model_pipeline(
     X_train_pd: pd.Series, y_train_encoded_pd: pd.Series,
@@ -163,19 +176,16 @@ def run_model_pipeline(
         'tfidf__norm': model_config.get("tfidf_norm_grid", ['l1', 'l2']), 
     }
     
-    # 'tfidf__use_idf': model_config.get("tfidf_use_idf_grid", [True, False]),
-    
     model_specific_grid = {}
     
     if model_type == 'bayes':
-        model_specific_grid['model__alpha'] = model_config.get('bayes_alpha_grid', [1.0]) # Add this
+        model_specific_grid['model__alpha'] = model_config.get('bayes_alpha_grid', [1.0])
     elif model_type == 'lr':
         model_specific_grid['model__C'] = model_config.get('lr_C_grid', [1.0])
         model_specific_grid['model__max_iter'] = model_config.get('lr_max_iter_grid', [1000]) 
         model_specific_grid['model__penalty'] = model_config.get('lr_penalty_grid', ['l1', 'l2'])
         model_specific_grid['model__class_weight'] = model_config.get('lr_class_weight_grid', [None, 'balanced'])
         
-
     param_combinations.update(model_specific_grid)
     grid = ParameterGrid(param_combinations)
     
@@ -204,11 +214,10 @@ def run_model_pipeline(
     for params in grid:
         print(f"  Testing params: {params}")
         fold_scores = []
-        #tfidf_params = {k.split('__')[1]: v for k, v in params.items() if k.startswith('tfidf__')} before fixed vocabulary
         model_params_from_grid = {k.split('__')[1]: v for k, v in params.items() if k.startswith('model__')}
 
         fold_num = 0
-        for train_idx, val_idx in kf.split(X_train_val_combined_pd, y_train_val_encoded_pd_aligned): #how split devide this -> more advance
+        for train_idx, val_idx in kf.split(X_train_val_combined_pd, y_train_val_encoded_pd_aligned):
             fold_num += 1
             X_train_fold_pd = X_train_val_combined_pd.iloc[train_idx]
             y_train_fold_pd = y_train_val_encoded_pd_aligned.iloc[train_idx]
@@ -223,25 +232,24 @@ def run_model_pipeline(
             
             #conversion to GPU data type
             try:
-                X_train_fold_cudf = cudf.Series(X_train_fold_pd) #cudf is a GPU DataFrame library that mirrors the pandas API.
-                y_train_fold_cupy = cupy.asarray(y_train_fold_pd.to_numpy(dtype=np.int32)) # CuPy for Arrays: cupy is a GPU array library that mirrors the NumPy API
+                X_train_fold_cudf = cudf.Series(X_train_fold_pd)
+                y_train_fold_cupy = cupy.asarray(y_train_fold_pd.to_numpy(dtype=np.int32))
                 X_val_fold_cudf = cudf.Series(X_val_fold_pd)
                 y_val_fold_cupy = cupy.asarray(y_val_fold_pd.to_numpy(dtype=np.int32))
 
-                #cv_tfidf_vectorizer = TfidfVectorizer(**tfidf_params) # cuml.TfidfVectorizer
                 current_tfidf_params_for_cv = {k.split('__')[1]: v for k, v in params.items() if k.startswith('tfidf__')}
                 cv_tfidf_vectorizer = TfidfVectorizer(
                     vocabulary=fixed_vocabulary_dict,
-                    ngram_range=(1, 2),       # The fixed vocab defines the n-grams CHANGEEEE
-                    lowercase=False,          # Assuming SpaCy handled this
-                    stop_words=None,          # Assuming SpaCy handled this
-                    **current_tfidf_params_for_cv # Add this if you ARE tuning other TF-IDF params
+                    ngram_range=(1, 2),
+                    lowercase=False,
+                    stop_words=None,
+                    **current_tfidf_params_for_cv
                 )
                 X_train_tfidf_gpu = cv_tfidf_vectorizer.fit_transform(X_train_fold_cudf)
                 X_val_tfidf_gpu = cv_tfidf_vectorizer.transform(X_val_fold_cudf)
 
                 current_score = 0.0
-                y_pred_val_cpu_fold = None # Prediction on validation fold
+                y_pred_val_cpu_fold = None
                 
                 #model fitting
                 if model_type == 'bayes':
@@ -267,7 +275,7 @@ def run_model_pipeline(
                 import traceback
                 traceback.print_exc()
                 fold_scores.append(0)
-            finally: # Ensure cleanup
+            finally:
                 del X_train_fold_cudf, y_train_fold_cupy, X_val_fold_cudf, y_val_fold_cupy
                 del X_train_tfidf_gpu, X_val_tfidf_gpu
                 if y_train_fold_cpu is not None: del y_train_fold_cpu
@@ -294,7 +302,6 @@ def run_model_pipeline(
         return None
 
     #--- Training final model ---
-
     print("Training final model using best parameters found...")
     start_time_final_train = time.time()
 
@@ -304,13 +311,12 @@ def run_model_pipeline(
     best_tfidf_params_final = {k.split('__')[1]: v for k, v in best_params.items() if k.startswith('tfidf__')}
     best_model_params_final = {k.split('__')[1]: v for k, v in best_params.items() if k.startswith('model__')}
 
-    #final_tfidf_vectorizer = TfidfVectorizer(**best_tfidf_params_final) # cuml.TfidfVectorizer old tfidf
     final_tfidf_vectorizer = TfidfVectorizer(
-    vocabulary=fixed_vocabulary_dict, # This is passed to run_model_pipeline
-    ngram_range=(1, 2), #CHANGEEE
-    lowercase=False,
-    stop_words=None,
-    **best_tfidf_params_final # This will include the best 'use_idf' and 'norm'
+        vocabulary=fixed_vocabulary_dict,
+        ngram_range=(1, 2),
+        lowercase=False,
+        stop_words=None,
+        **best_tfidf_params_final
     ) 
     X_train_val_final_tfidf_gpu = final_tfidf_vectorizer.fit_transform(X_train_val_final_cudf)
 
@@ -323,7 +329,6 @@ def run_model_pipeline(
             coefficients = final_model_instance.feature_log_prob_[1] - final_model_instance.feature_log_prob_[0]
             feature_names = final_tfidf_vectorizer.get_feature_names().to_pandas()
             feature_importance = dict(zip(feature_names, coefficients))
-            
             
             congress_seed_key = f"{congress_year}_{random_state}"
             congress_feature_importance_bayes[congress_seed_key] = feature_importance
@@ -361,7 +366,7 @@ def run_model_pipeline(
 
     # Ensure y_test is a CuPy array for cuML metrics
     y_test_encoded_gpu_eval = cupy.asarray(y_test_encoded_pd.to_numpy(dtype=cupy.int32))
-    X_test_cudf_eval = cudf.Series(X_test_pd) # X_test_pd should be the raw text data
+    X_test_cudf_eval = cudf.Series(X_test_pd)
     
     # --- Test final model ---
     print("Evaluating final model on test data...")
@@ -372,10 +377,10 @@ def run_model_pipeline(
 
     # Initialize metrics
     final_accuracy_eval = 0.0
-    final_f1_weighted_eval = 0.0 # now calculate not available
+    final_f1_weighted_eval = 0.0
     auc_eval = None
-    cm_cpu_eval = None # Initialize cm_cpu_eval
-    classification_report_dict = {} # Initialize for classification report
+    cm_cpu_eval = None
+    classification_report_dict = {}
 
     # Get predictions (already on GPU) - INITIALIZE HERE
     y_test_pred_gpu_eval = final_model_instance.predict(X_test_final_tfidf_gpu_eval)
@@ -387,14 +392,13 @@ def run_model_pipeline(
     # --- Calculate target_names_eval (Moved Earlier) ---
     try:
         reverse_party_map_eval = {v: k for k, v in party_map.items()}
-        unique_labels_in_test_cpu_eval = sorted(list(np.unique(y_test_encoded_cpu))) # Use y_test_encoded_cpu directly
+        unique_labels_in_test_cpu_eval = sorted(list(np.unique(y_test_encoded_cpu)))
         target_names_eval = [reverse_party_map_eval.get(i, str(i)) for i in unique_labels_in_test_cpu_eval]
     except Exception as e:
         print(f"Could not get target names for classification report: {e}")
-        # Fallback if party_map is problematic or labels are unexpected
         if 'y_test_encoded_cpu' in locals() and y_test_encoded_cpu.size > 0:
              target_names_eval = [str(i) for i in sorted(list(np.unique(y_test_encoded_cpu)))]
-        else: # Absolute fallback if y_test_encoded_cpu isn't even available
+        else:
             target_names_eval = [] 
             print("Warning: y_test_encoded_cpu not available for target_names_eval.")
             
@@ -425,7 +429,7 @@ def run_model_pipeline(
             auc_eval = None
         
         # --- Per-Class Metrics (Classification Report) ---
-        if target_names_eval: # Only proceed if we have target names
+        if target_names_eval:
             report_str = classification_report(y_test_encoded_cpu, y_test_pred_cpu, target_names=target_names_eval, zero_division=0)
             print("\nClassification Report:\n", report_str)
             classification_report_dict = classification_report(y_test_encoded_cpu, y_test_pred_cpu, target_names=target_names_eval, zero_division=0, output_dict=True)
@@ -435,8 +439,8 @@ def run_model_pipeline(
 
     except Exception as e:
         print(f"Error during cuML and scikit metrics calculation: {e}")
-        import traceback # Good for debugging
-        traceback.print_exc() # Good for debugging
+        import traceback
+        traceback.print_exc()
         final_accuracy_eval = 0.0
         final_f1_weighted_eval = 0.0
         auc_eval = None
@@ -453,15 +457,16 @@ def run_model_pipeline(
     print(f"\n--- Final Test Results ({model_type.upper()}) ---")
     print(f"Accuracy: {final_accuracy_eval:.4f}")
     print(f"Weighted F1 Score: {final_f1_weighted_eval:.4f}")
-    # The classification_report string is already printed above if generated
 
     cm_list_eval = cm_cpu_eval.tolist() if cm_cpu_eval is not None and cm_cpu_eval.size > 0 else []
-    # target_names_eval is already defined and handled before this print block
 
-    if auc_eval is not None: print(f"ROC-AUC          : {auc_eval:.4f}")
-    else: print("ROC-AUC          : NA")
+    if auc_eval is not None: 
+        print(f"ROC-AUC: {auc_eval:.4f}")
+    else: 
+        print("ROC-AUC: NA")
 
-    if cm_cpu_eval is not None and cm_cpu_eval.size > 0: print("Confusion Matrix:\n", cm_cpu_eval)
+    if cm_cpu_eval is not None and cm_cpu_eval.size > 0: 
+        print("Confusion Matrix:\n", cm_cpu_eval)
 
     print("-" * 25)
     
@@ -480,7 +485,7 @@ def run_model_pipeline(
         print(f"Warning: Could not get probability/decision scores: {e}")
         prob_scores_cpu = [0.5] * len(test_speech_ids)
 
-    # Convert predictions to CPU for saving - y_test_pred_gpu_eval is now guaranteed to exist
+    # Convert predictions to CPU for saving
     y_test_pred_cpu_for_save = cupy.asnumpy(y_test_pred_gpu_eval)
 
     # Save predictions with speech_ids
@@ -491,9 +496,9 @@ def run_model_pipeline(
             speech_id,
             congress_year,
             random_state,
-            int(y_test_encoded_cpu[i]),           # true label (already on CPU)
-            int(y_test_pred_cpu_for_save[i]),     # predicted label
-            float(prob_scores_cpu[i])             # probability/decision score
+            int(y_test_encoded_cpu[i]),
+            int(y_test_pred_cpu_for_save[i]),
+            float(prob_scores_cpu[i])
         ])
 
     # Determine the correct predictions file path
@@ -513,7 +518,7 @@ def run_model_pipeline(
     if 'decision_scores_gpu_for_save' in locals():
         del decision_scores_gpu_for_save
 
-    # In the run_model_pipeline function, update the result_json creation:
+    # Create result JSON
     result_json = {
         "seed": random_state, 
         "year": congress_year, 
@@ -536,6 +541,7 @@ def run_model_pipeline(
         }
     }
     
+    # Log timing
     current_timing_log_path = timing_log_paths[model_type]
     with open(current_timing_log_path, "a") as f:
         f.write(
@@ -547,7 +553,7 @@ def run_model_pipeline(
             f"{result_json['timing']['total_pipeline_sec']}\n"
         )
     
-    # In the logging section, replace the writing part:
+    # Log detailed performance metrics
     current_detailed_log_path = detailed_log_paths[model_type]
     with open(current_detailed_log_path, "a") as f:
         # Extract parameters specific to this model type
@@ -583,7 +589,7 @@ def run_model_pipeline(
     
     if 'X_test_cudf_eval' in locals(): del X_test_cudf_eval
     if X_test_final_tfidf_gpu_eval is not None: del X_test_final_tfidf_gpu_eval
-    if 'y_test_encoded_gpu_eval' in locals(): del y_test_encoded_gpu_eval # Clean up the GPU array for y_test
+    if 'y_test_encoded_gpu_eval' in locals(): del y_test_encoded_gpu_eval
 
     if final_tfidf_vectorizer is not None: del final_tfidf_vectorizer
     if final_model_instance is not None: del final_model_instance
@@ -631,8 +637,7 @@ if __name__ == "__main__":
         traceback.print_exc()
         exit()
 
-    # --- --- --- --- --- 
-    
+    # Initialize feature importance dictionaries
     congress_years_to_process = [f"{i:03}" for i in range(CONGRESS_YEAR_START, CONGRESS_YEAR_END + 1)]
     models_to_run = ['bayes', 'lr',] 
     congress_feature_importance_bayes = {}
@@ -652,7 +657,7 @@ if __name__ == "__main__":
                 df_full = pd.read_csv(input_csv_path)
                 print(f"Data loaded. Shape: {df_full.shape}")
 
-                #controll
+                # Data validation
                 if df_full.empty or not all(col in df_full.columns for col in ['speech', 'party', 'speakerid']):
                     print(f"⚠️  Skipping Congress {year_str} (seed {seed}): Data empty or missing required columns.")
                     continue
@@ -675,7 +680,7 @@ if __name__ == "__main__":
 
                 if len(train_val_speakers) < 2 :
                     train_speakers = train_val_speakers
-                    val_speakers = np.array([]) # Ensure it's an empty array for consistency
+                    val_speakers = np.array([])
                 else:
                     current_validation_size = VALIDATION_SIZE if len(train_val_speakers) * VALIDATION_SIZE >= 1 else 1/len(train_val_speakers)
                     train_speakers, val_speakers = train_test_split(
@@ -763,7 +768,7 @@ if __name__ == "__main__":
                 import traceback
                 traceback.print_exc()
             finally:
-                # General cleanup at the end of processing a year, if any dataframes are large and still in scope
+                # General cleanup at the end of processing a year
                 if 'df_full' in locals(): del df_full
                 if 'train_df' in locals(): del train_df
                 if 'val_df' in locals(): del val_df
@@ -845,7 +850,7 @@ if __name__ == "__main__":
             import traceback
             traceback.print_exc()
     
-    # Save both dictionaries
+    # Save feature importance dictionaries
     print("Saving feature importance dictionaries...")
     save_feature_importance(congress_feature_importance_bayes, "bayes")
     save_feature_importance(congress_feature_importance_lr, "lr")
