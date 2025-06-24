@@ -659,6 +659,7 @@ if __name__ == "__main__":
                         fixed_vocabulary_dict=fixed_sklearn_vocabulary,
                         test_speech_ids=test_speech_ids
                     )
+                    
             except Exception as e:
                 print(f"❌ An error occurred during processing for Congress {year_str} with seed {seed}: {e}")
                 import traceback

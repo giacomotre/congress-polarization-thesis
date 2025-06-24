@@ -18,9 +18,3 @@ dependencies:
   - joblib
   - matplotlib 
   - seaborn
-
-  - jupyterlab 
-  - notebook 
-
-  # --- Pip ---
-  - pip

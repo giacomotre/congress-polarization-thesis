@@ -19,9 +19,6 @@ from tqdm import tqdm
 # These are safe to define at the top level as they don't execute process-creating code on import.
 SCRIPT_DIR = Path(__file__).resolve().parent
 
-# Words to remove (in addition to entities, stop words, etc.)
-WORDS_TO_REMOVE = {"gentleman", "committee", "chairman", "time", "speaker"}
-
 def process_spacy_doc(doc):
     """
     Processes a single SpaCy Doc object to extract cleaned, lemmatized tokens
@@ -49,10 +46,6 @@ def process_spacy_doc(doc):
         if token_in_entity_to_remove:
             continue
 
-        # DEBUGGING 
-        if token.text.lower() in ['republicans', 'democrats', 'spending', 'administrations']:
-            print(f"Token: '{token.text}' → Lemma: '{token.lemma_}' | POS: {token.pos_} | Is_alpha: {token.is_alpha}")
-
         if (not token.is_stop and
             not token.is_punct and
             not token.is_currency and
@@ -69,11 +62,6 @@ def process_spacy_doc(doc):
     i = 0
     while i < len(intermediate_lemmas):
         current_lemma = intermediate_lemmas[i]
-        
-        # Remove specific words
-        if current_lemma in WORDS_TO_REMOVE:
-            i += 1
-            continue
         
         # Normalize "mr." to "mr" for checking, also handle "mister"
         is_mr_or_mister = (current_lemma.rstrip('.') == "mr" or current_lemma == "mister")
@@ -136,8 +124,8 @@ if __name__ == '__main__':
         exit()
         
     # --- Main Processing Loop ---
-    CONGRESS_RANGE = range(104, 104) # Example: 76-112 
-    batch_size = 1024 #VRAM usage 20 out of 40, could increase to 2.560
+    CONGRESS_RANGE = range(76, 111) # Example: 76-112 
+    batch_size = 1024 #VRAM usage 20 out of 40
     n_processes = 1 # Use -1 for all cores, or a specific number > 1 for multiprocessing
 
     base_dir = SCRIPT_DIR / "../data/merged"

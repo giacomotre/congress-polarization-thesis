@@ -1,0 +1,326 @@
+[
+    {
+        "Congress": 76,
+        "Start Count (After Basic Clean)": 110442,
+        "Removed (Speech NA)": 409,
+        "Removed (Duplicates)": 26478,
+        "Removed (Clipped)": 46216,
+        "Count before Clipping": 83555,
+        "Final Count (After Clipping)": 37339
+    },
+    {
+        "Congress": 77,
+        "Start Count (After Basic Clean)": 82231,
+        "Removed (Speech NA)": 375,
+        "Removed (Duplicates)": 17615,
+        "Removed (Clipped)": 35213,
+        "Count before Clipping": 64241,
+        "Final Count (After Clipping)": 29028
+    },
+    {
+        "Congress": 78,
+        "Start Count (After Basic Clean)": 82781,
+        "Removed (Speech NA)": 805,
+        "Removed (Duplicates)": 18169,
+        "Removed (Clipped)": 34246,
+        "Count before Clipping": 63807,
+        "Final Count (After Clipping)": 29561
+    },
+    {
+        "Congress": 79,
+        "Start Count (After Basic Clean)": 106665,
+        "Removed (Speech NA)": 311,
+        "Removed (Duplicates)": 25086,
+        "Removed (Clipped)": 42266,
+        "Count before Clipping": 81268,
+        "Final Count (After Clipping)": 39002
+    },
+    {
+        "Congress": 80,
+        "Start Count (After Basic Clean)": 92913,
+        "Removed (Speech NA)": 389,
+        "Removed (Duplicates)": 22008,
+        "Removed (Clipped)": 35939,
+        "Count before Clipping": 70516,
+        "Final Count (After Clipping)": 34577
+    },
+    {
+        "Congress": 81,
+        "Start Count (After Basic Clean)": 174854,
+        "Removed (Speech NA)": 373,
+        "Removed (Duplicates)": 43258,
+        "Removed (Clipped)": 68838,
+        "Count before Clipping": 131223,
+        "Final Count (After Clipping)": 62385
+    },
+    {
+        "Congress": 82,
+        "Start Count (After Basic Clean)": 125998,
+        "Removed (Speech NA)": 308,
+        "Removed (Duplicates)": 30071,
+        "Removed (Clipped)": 50710,
+        "Count before Clipping": 95619,
+        "Final Count (After Clipping)": 44909
+    },
+    {
+        "Congress": 83,
+        "Start Count (After Basic Clean)": 130587,
+        "Removed (Speech NA)": 378,
+        "Removed (Duplicates)": 31975,
+        "Removed (Clipped)": 49361,
+        "Count before Clipping": 98234,
+        "Final Count (After Clipping)": 48873
+    },
+    {
+        "Congress": 84,
+        "Start Count (After Basic Clean)": 86968,
+        "Removed (Speech NA)": 373,
+        "Removed (Duplicates)": 18513,
+        "Removed (Clipped)": 34029,
+        "Count before Clipping": 68082,
+        "Final Count (After Clipping)": 34053
+    },
+    {
+        "Congress": 85,
+        "Start Count (After Basic Clean)": 122897,
+        "Removed (Speech NA)": 141,
+        "Removed (Duplicates)": 27621,
+        "Removed (Clipped)": 44515,
+        "Count before Clipping": 95135,
+        "Final Count (After Clipping)": 50620
+    },
+    {
+        "Congress": 86,
+        "Start Count (After Basic Clean)": 142361,
+        "Removed (Speech NA)": 96,
+        "Removed (Duplicates)": 32234,
+        "Removed (Clipped)": 53252,
+        "Count before Clipping": 110031,
+        "Final Count (After Clipping)": 56779
+    },
+    {
+        "Congress": 87,
+        "Start Count (After Basic Clean)": 133586,
+        "Removed (Speech NA)": 41,
+        "Removed (Duplicates)": 29064,
+        "Removed (Clipped)": 49413,
+        "Count before Clipping": 104481,
+        "Final Count (After Clipping)": 55068
+    },
+    {
+        "Congress": 88,
+        "Start Count (After Basic Clean)": 136222,
+        "Removed (Speech NA)": 223,
+        "Removed (Duplicates)": 28112,
+        "Removed (Clipped)": 48663,
+        "Count before Clipping": 107887,
+        "Final Count (After Clipping)": 59224
+    },
+    {
+        "Congress": 89,
+        "Start Count (After Basic Clean)": 108909,
+        "Removed (Speech NA)": 146,
+        "Removed (Duplicates)": 21458,
+        "Removed (Clipped)": 36850,
+        "Count before Clipping": 87305,
+        "Final Count (After Clipping)": 50455
+    },
+    {
+        "Congress": 90,
+        "Start Count (After Basic Clean)": 118523,
+        "Removed (Speech NA)": 89,
+        "Removed (Duplicates)": 24629,
+        "Removed (Clipped)": 40533,
+        "Count before Clipping": 93805,
+        "Final Count (After Clipping)": 53272
+    },
+    {
+        "Congress": 91,
+        "Start Count (After Basic Clean)": 139885,
+        "Removed (Speech NA)": 49,
+        "Removed (Duplicates)": 29068,
+        "Removed (Clipped)": 47678,
+        "Count before Clipping": 110768,
+        "Final Count (After Clipping)": 63090
+    },
+    {
+        "Congress": 92,
+        "Start Count (After Basic Clean)": 127972,
+        "Removed (Speech NA)": 161,
+        "Removed (Duplicates)": 27464,
+        "Removed (Clipped)": 44686,
+        "Count before Clipping": 100347,
+        "Final Count (After Clipping)": 55661
+    },
+    {
+        "Congress": 93,
+        "Start Count (After Basic Clean)": 138209,
+        "Removed (Speech NA)": 59,
+        "Removed (Duplicates)": 28344,
+        "Removed (Clipped)": 49946,
+        "Count before Clipping": 109806,
+        "Final Count (After Clipping)": 59860
+    },
+    {
+        "Congress": 94,
+        "Start Count (After Basic Clean)": 155433,
+        "Removed (Speech NA)": 177,
+        "Removed (Duplicates)": 31361,
+        "Removed (Clipped)": 62952,
+        "Count before Clipping": 123895,
+        "Final Count (After Clipping)": 60943
+    },
+    {
+        "Congress": 95,
+        "Start Count (After Basic Clean)": 169782,
+        "Removed (Speech NA)": 88,
+        "Removed (Duplicates)": 36755,
+        "Removed (Clipped)": 69420,
+        "Count before Clipping": 132939,
+        "Final Count (After Clipping)": 63519
+    },
+    {
+        "Congress": 96,
+        "Start Count (After Basic Clean)": 129330,
+        "Removed (Speech NA)": 88,
+        "Removed (Duplicates)": 28471,
+        "Removed (Clipped)": 47608,
+        "Count before Clipping": 100771,
+        "Final Count (After Clipping)": 53163
+    },
+    {
+        "Congress": 97,
+        "Start Count (After Basic Clean)": 111057,
+        "Removed (Speech NA)": 34,
+        "Removed (Duplicates)": 23285,
+        "Removed (Clipped)": 39515,
+        "Count before Clipping": 87738,
+        "Final Count (After Clipping)": 48223
+    },
+    {
+        "Congress": 98,
+        "Start Count (After Basic Clean)": 98851,
+        "Removed (Speech NA)": 52,
+        "Removed (Duplicates)": 21083,
+        "Removed (Clipped)": 32400,
+        "Count before Clipping": 77716,
+        "Final Count (After Clipping)": 45316
+    },
+    {
+        "Congress": 99,
+        "Start Count (After Basic Clean)": 111418,
+        "Removed (Speech NA)": 60,
+        "Removed (Duplicates)": 23139,
+        "Removed (Clipped)": 36936,
+        "Count before Clipping": 88219,
+        "Final Count (After Clipping)": 51283
+    },
+    {
+        "Congress": 100,
+        "Start Count (After Basic Clean)": 109109,
+        "Removed (Speech NA)": 65,
+        "Removed (Duplicates)": 20629,
+        "Removed (Clipped)": 37444,
+        "Count before Clipping": 88415,
+        "Final Count (After Clipping)": 50971
+    },
+    {
+        "Congress": 101,
+        "Start Count (After Basic Clean)": 90859,
+        "Removed (Speech NA)": 49,
+        "Removed (Duplicates)": 17523,
+        "Removed (Clipped)": 28362,
+        "Count before Clipping": 73287,
+        "Final Count (After Clipping)": 44925
+    },
+    {
+        "Congress": 102,
+        "Start Count (After Basic Clean)": 82722,
+        "Removed (Speech NA)": 45,
+        "Removed (Duplicates)": 15247,
+        "Removed (Clipped)": 24657,
+        "Count before Clipping": 67430,
+        "Final Count (After Clipping)": 42773
+    },
+    {
+        "Congress": 103,
+        "Start Count (After Basic Clean)": 85346,
+        "Removed (Speech NA)": 53,
+        "Removed (Duplicates)": 15159,
+        "Removed (Clipped)": 27667,
+        "Count before Clipping": 70134,
+        "Final Count (After Clipping)": 42467
+    },
+    {
+        "Congress": 104,
+        "Start Count (After Basic Clean)": 90421,
+        "Removed (Speech NA)": 83,
+        "Removed (Duplicates)": 16172,
+        "Removed (Clipped)": 30377,
+        "Count before Clipping": 74166,
+        "Final Count (After Clipping)": 43789
+    },
+    {
+        "Congress": 105,
+        "Start Count (After Basic Clean)": 66563,
+        "Removed (Speech NA)": 97,
+        "Removed (Duplicates)": 11121,
+        "Removed (Clipped)": 21736,
+        "Count before Clipping": 55345,
+        "Final Count (After Clipping)": 33609
+    },
+    {
+        "Congress": 106,
+        "Start Count (After Basic Clean)": 67772,
+        "Removed (Speech NA)": 13,
+        "Removed (Duplicates)": 10797,
+        "Removed (Clipped)": 22534,
+        "Count before Clipping": 56962,
+        "Final Count (After Clipping)": 34428
+    },
+    {
+        "Congress": 107,
+        "Start Count (After Basic Clean)": 61653,
+        "Removed (Speech NA)": 6,
+        "Removed (Duplicates)": 10880,
+        "Removed (Clipped)": 19464,
+        "Count before Clipping": 50767,
+        "Final Count (After Clipping)": 31303
+    },
+    {
+        "Congress": 108,
+        "Start Count (After Basic Clean)": 63774,
+        "Removed (Speech NA)": 5,
+        "Removed (Duplicates)": 11129,
+        "Removed (Clipped)": 20172,
+        "Count before Clipping": 52640,
+        "Final Count (After Clipping)": 32468
+    },
+    {
+        "Congress": 109,
+        "Start Count (After Basic Clean)": 53665,
+        "Removed (Speech NA)": 16,
+        "Removed (Duplicates)": 9592,
+        "Removed (Clipped)": 16336,
+        "Count before Clipping": 44057,
+        "Final Count (After Clipping)": 27721
+    },
+    {
+        "Congress": 110,
+        "Start Count (After Basic Clean)": 51322,
+        "Removed (Speech NA)": 9,
+        "Removed (Duplicates)": 8967,
+        "Removed (Clipped)": 14860,
+        "Count before Clipping": 42346,
+        "Final Count (After Clipping)": 27486
+    },
+    {
+        "Congress": 111,
+        "Start Count (After Basic Clean)": 42917,
+        "Removed (Speech NA)": 5,
+        "Removed (Duplicates)": 8052,
+        "Removed (Clipped)": 11846,
+        "Count before Clipping": 34860,
+        "Final Count (After Clipping)": 23014
+    }
+]

@@ -1,17 +1,17 @@
 {
   "analysis_info": {
-    "congress_range": "76-86",
-    "total_speeches_original": 353434,
-    "total_speeches_filtered": 353433,
-    "total_sentences": 353433,
-    "total_topics": 50,
+    "congress_range": "76-111",
+    "total_speeches_original": 1464616,
+    "total_speeches_filtered": 1464599,
+    "total_sentences": 1464599,
+    "total_topics": 25,
     "parties": [
-      "R",
-      "D"
+      "D",
+      "R"
     ],
     "embedding_model": "all-MiniLM-L6-v2",
     "clustering_model": "KMeans",
-    "n_clusters": 50,
+    "n_clusters": 25,
     "representation_models": [
       "KeyBERT",
       "OpenAI",
@@ -20,554 +20,279 @@
     ]
   },
   "topic_summary": {
-    "40": {
-      "total_speeches": 5402,
+    "6": {
+      "total_speeches": 61318,
       "parties": [
         "R",
         "D"
       ],
       "party_counts": {
-        "R": 2972,
-        "D": 2430
-      }
-    },
-    "36": {
-      "total_speeches": 5885,
-      "parties": [
-        "R",
-        "D"
-      ],
-      "party_counts": {
-        "R": 2618,
-        "D": 3267
-      }
-    },
-    "44": {
-      "total_speeches": 4456,
-      "parties": [
-        "D",
-        "R"
-      ],
-      "party_counts": {
-        "D": 3284,
-        "R": 1172
-      }
-    },
-    "29": {
-      "total_speeches": 6525,
-      "parties": [
-        "R",
-        "D"
-      ],
-      "party_counts": {
-        "R": 2821,
-        "D": 3704
-      }
-    },
-    "7": {
-      "total_speeches": 9183,
-      "parties": [
-        "R",
-        "D"
-      ],
-      "party_counts": {
-        "R": 4035,
-        "D": 5148
-      }
-    },
-    "18": {
-      "total_speeches": 7899,
-      "parties": [
-        "D",
-        "R"
-      ],
-      "party_counts": {
-        "D": 4295,
-        "R": 3604
-      }
-    },
-    "33": {
-      "total_speeches": 6155,
-      "parties": [
-        "D",
-        "R"
-      ],
-      "party_counts": {
-        "D": 3477,
-        "R": 2678
-      }
-    },
-    "16": {
-      "total_speeches": 7967,
-      "parties": [
-        "D",
-        "R"
-      ],
-      "party_counts": {
-        "D": 4381,
-        "R": 3586
-      }
-    },
-    "47": {
-      "total_speeches": 3191,
-      "parties": [
-        "R",
-        "D"
-      ],
-      "party_counts": {
-        "R": 1360,
-        "D": 1831
+        "R": 29955,
+        "D": 31363
       }
     },
     "4": {
-      "total_speeches": 9625,
+      "total_speeches": 74446,
       "parties": [
         "R",
         "D"
       ],
       "party_counts": {
-        "R": 4479,
-        "D": 5146
-      }
-    },
-    "12": {
-      "total_speeches": 8510,
-      "parties": [
-        "R",
-        "D"
-      ],
-      "party_counts": {
-        "R": 2006,
-        "D": 6504
-      }
-    },
-    "15": {
-      "total_speeches": 8096,
-      "parties": [
-        "R",
-        "D"
-      ],
-      "party_counts": {
-        "R": 4192,
-        "D": 3904
-      }
-    },
-    "23": {
-      "total_speeches": 7336,
-      "parties": [
-        "R",
-        "D"
-      ],
-      "party_counts": {
-        "R": 3387,
-        "D": 3949
-      }
-    },
-    "42": {
-      "total_speeches": 4971,
-      "parties": [
-        "R",
-        "D"
-      ],
-      "party_counts": {
-        "R": 2397,
-        "D": 2574
-      }
-    },
-    "11": {
-      "total_speeches": 8904,
-      "parties": [
-        "R",
-        "D"
-      ],
-      "party_counts": {
-        "R": 4379,
-        "D": 4525
-      }
-    },
-    "19": {
-      "total_speeches": 7781,
-      "parties": [
-        "R",
-        "D"
-      ],
-      "party_counts": {
-        "R": 4180,
-        "D": 3601
-      }
-    },
-    "34": {
-      "total_speeches": 6097,
-      "parties": [
-        "R",
-        "D"
-      ],
-      "party_counts": {
-        "R": 2917,
-        "D": 3180
-      }
-    },
-    "28": {
-      "total_speeches": 6732,
-      "parties": [
-        "R",
-        "D"
-      ],
-      "party_counts": {
-        "R": 2980,
-        "D": 3752
-      }
-    },
-    "35": {
-      "total_speeches": 6010,
-      "parties": [
-        "D",
-        "R"
-      ],
-      "party_counts": {
-        "D": 3192,
-        "R": 2818
-      }
-    },
-    "27": {
-      "total_speeches": 6823,
-      "parties": [
-        "R",
-        "D"
-      ],
-      "party_counts": {
-        "R": 3249,
-        "D": 3574
-      }
-    },
-    "13": {
-      "total_speeches": 8411,
-      "parties": [
-        "D",
-        "R"
-      ],
-      "party_counts": {
-        "D": 4661,
-        "R": 3750
-      }
-    },
-    "10": {
-      "total_speeches": 8970,
-      "parties": [
-        "R",
-        "D"
-      ],
-      "party_counts": {
-        "R": 4390,
-        "D": 4580
-      }
-    },
-    "17": {
-      "total_speeches": 7902,
-      "parties": [
-        "R",
-        "D"
-      ],
-      "party_counts": {
-        "R": 4066,
-        "D": 3836
-      }
-    },
-    "39": {
-      "total_speeches": 5569,
-      "parties": [
-        "D",
-        "R"
-      ],
-      "party_counts": {
-        "D": 2468,
-        "R": 3101
-      }
-    },
-    "9": {
-      "total_speeches": 8992,
-      "parties": [
-        "D",
-        "R"
-      ],
-      "party_counts": {
-        "D": 4603,
-        "R": 4389
-      }
-    },
-    "22": {
-      "total_speeches": 7353,
-      "parties": [
-        "D",
-        "R"
-      ],
-      "party_counts": {
-        "D": 3498,
-        "R": 3855
-      }
-    },
-    "3": {
-      "total_speeches": 9821,
-      "parties": [
-        "R",
-        "D"
-      ],
-      "party_counts": {
-        "R": 4414,
-        "D": 5407
-      }
-    },
-    "24": {
-      "total_speeches": 7110,
-      "parties": [
-        "R",
-        "D"
-      ],
-      "party_counts": {
-        "R": 2927,
-        "D": 4183
-      }
-    },
-    "20": {
-      "total_speeches": 7708,
-      "parties": [
-        "R",
-        "D"
-      ],
-      "party_counts": {
-        "R": 3623,
-        "D": 4085
-      }
-    },
-    "5": {
-      "total_speeches": 9398,
-      "parties": [
-        "R",
-        "D"
-      ],
-      "party_counts": {
-        "R": 4607,
-        "D": 4791
-      }
-    },
-    "38": {
-      "total_speeches": 5618,
-      "parties": [
-        "R",
-        "D"
-      ],
-      "party_counts": {
-        "R": 2800,
-        "D": 2818
-      }
-    },
-    "30": {
-      "total_speeches": 6259,
-      "parties": [
-        "R",
-        "D"
-      ],
-      "party_counts": {
-        "R": 2968,
-        "D": 3291
-      }
-    },
-    "37": {
-      "total_speeches": 5799,
-      "parties": [
-        "R",
-        "D"
-      ],
-      "party_counts": {
-        "R": 2810,
-        "D": 2989
-      }
-    },
-    "25": {
-      "total_speeches": 7052,
-      "parties": [
-        "R",
-        "D"
-      ],
-      "party_counts": {
-        "R": 3590,
-        "D": 3462
-      }
-    },
-    "26": {
-      "total_speeches": 7013,
-      "parties": [
-        "D",
-        "R"
-      ],
-      "party_counts": {
-        "D": 3932,
-        "R": 3081
-      }
-    },
-    "43": {
-      "total_speeches": 4462,
-      "parties": [
-        "R",
-        "D"
-      ],
-      "party_counts": {
-        "R": 2018,
-        "D": 2444
-      }
-    },
-    "41": {
-      "total_speeches": 5320,
-      "parties": [
-        "R",
-        "D"
-      ],
-      "party_counts": {
-        "R": 2233,
-        "D": 3087
-      }
-    },
-    "49": {
-      "total_speeches": 2227,
-      "parties": [
-        "D",
-        "R"
-      ],
-      "party_counts": {
-        "D": 1772,
-        "R": 455
+        "R": 29224,
+        "D": 45222
       }
     },
     "14": {
-      "total_speeches": 8298,
+      "total_speeches": 54439,
       "parties": [
         "D",
         "R"
       ],
       "party_counts": {
-        "D": 4610,
-        "R": 3688
+        "D": 38569,
+        "R": 15870
       }
     },
-    "2": {
-      "total_speeches": 9964,
+    "3": {
+      "total_speeches": 77327,
       "parties": [
         "D",
         "R"
       ],
       "party_counts": {
-        "D": 5404,
-        "R": 4560
+        "D": 41377,
+        "R": 35950
       }
     },
-    "0": {
-      "total_speeches": 11972,
+    "7": {
+      "total_speeches": 61033,
       "parties": [
         "R",
         "D"
       ],
       "party_counts": {
-        "R": 5652,
-        "D": 6320
+        "R": 27342,
+        "D": 33691
       }
     },
-    "6": {
-      "total_speeches": 9343,
+    "12": {
+      "total_speeches": 55557,
       "parties": [
         "R",
         "D"
       ],
       "party_counts": {
-        "R": 4833,
-        "D": 4510
+        "R": 23865,
+        "D": 31692
       }
     },
     "8": {
-      "total_speeches": 9023,
-      "parties": [
-        "R",
-        "D"
-      ],
-      "party_counts": {
-        "R": 3972,
-        "D": 5051
-      }
-    },
-    "1": {
-      "total_speeches": 11423,
-      "parties": [
-        "R",
-        "D"
-      ],
-      "party_counts": {
-        "R": 5404,
-        "D": 6019
-      }
-    },
-    "31": {
-      "total_speeches": 6233,
+      "total_speeches": 60668,
       "parties": [
         "D",
         "R"
       ],
       "party_counts": {
-        "D": 3120,
-        "R": 3113
+        "D": 37108,
+        "R": 23560
+      }
+    },
+    "20": {
+      "total_speeches": 44864,
+      "parties": [
+        "D",
+        "R"
+      ],
+      "party_counts": {
+        "D": 21747,
+        "R": 23117
+      }
+    },
+    "9": {
+      "total_speeches": 59174,
+      "parties": [
+        "R",
+        "D"
+      ],
+      "party_counts": {
+        "R": 26811,
+        "D": 32363
+      }
+    },
+    "15": {
+      "total_speeches": 54053,
+      "parties": [
+        "R",
+        "D"
+      ],
+      "party_counts": {
+        "R": 24327,
+        "D": 29726
+      }
+    },
+    "5": {
+      "total_speeches": 73026,
+      "parties": [
+        "R",
+        "D"
+      ],
+      "party_counts": {
+        "R": 36191,
+        "D": 36835
+      }
+    },
+    "17": {
+      "total_speeches": 51322,
+      "parties": [
+        "R",
+        "D"
+      ],
+      "party_counts": {
+        "R": 24157,
+        "D": 27165
+      }
+    },
+    "16": {
+      "total_speeches": 53650,
+      "parties": [
+        "R",
+        "D"
+      ],
+      "party_counts": {
+        "R": 26717,
+        "D": 26933
+      }
+    },
+    "10": {
+      "total_speeches": 57778,
+      "parties": [
+        "D",
+        "R"
+      ],
+      "party_counts": {
+        "D": 31046,
+        "R": 26732
+      }
+    },
+    "24": {
+      "total_speeches": 36975,
+      "parties": [
+        "R",
+        "D"
+      ],
+      "party_counts": {
+        "R": 18239,
+        "D": 18736
+      }
+    },
+    "11": {
+      "total_speeches": 56977,
+      "parties": [
+        "D",
+        "R"
+      ],
+      "party_counts": {
+        "D": 31098,
+        "R": 25879
       }
     },
     "21": {
-      "total_speeches": 7683,
+      "total_speeches": 43885,
       "parties": [
         "D",
         "R"
       ],
       "party_counts": {
-        "D": 4316,
-        "R": 3367
+        "D": 22782,
+        "R": 21103
       }
     },
-    "45": {
-      "total_speeches": 4317,
+    "13": {
+      "total_speeches": 55249,
       "parties": [
         "R",
         "D"
       ],
       "party_counts": {
-        "R": 1915,
-        "D": 2402
+        "R": 24883,
+        "D": 30366
       }
     },
-    "46": {
-      "total_speeches": 3668,
+    "23": {
+      "total_speeches": 38889,
       "parties": [
         "R",
         "D"
       ],
       "party_counts": {
-        "R": 1872,
-        "D": 1796
+        "R": 16372,
+        "D": 22517
       }
     },
-    "32": {
-      "total_speeches": 6207,
+    "19": {
+      "total_speeches": 47390,
       "parties": [
         "R",
         "D"
       ],
       "party_counts": {
-        "R": 2920,
-        "D": 3287
+        "R": 18582,
+        "D": 28808
       }
     },
-    "48": {
-      "total_speeches": 2770,
+    "18": {
+      "total_speeches": 51150,
+      "parties": [
+        "R",
+        "D"
+      ],
+      "party_counts": {
+        "R": 21010,
+        "D": 30140
+      }
+    },
+    "0": {
+      "total_speeches": 87901,
+      "parties": [
+        "R",
+        "D"
+      ],
+      "party_counts": {
+        "R": 39818,
+        "D": 48083
+      }
+    },
+    "1": {
+      "total_speeches": 85148,
+      "parties": [
+        "R",
+        "D"
+      ],
+      "party_counts": {
+        "R": 38056,
+        "D": 47092
+      }
+    },
+    "2": {
+      "total_speeches": 79875,
       "parties": [
         "D",
         "R"
       ],
       "party_counts": {
-        "D": 1818,
-        "R": 952
+        "D": 45119,
+        "R": 34756
+      }
+    },
+    "22": {
+      "total_speeches": 42505,
+      "parties": [
+        "D",
+        "R"
+      ],
+      "party_counts": {
+        "D": 26879,
+        "R": 15626
       }
     }
   }
