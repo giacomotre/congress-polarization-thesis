@@ -1,7 +1,7 @@
 the original dataset can be download at this link: https://data.stanford.edu/congress_text
 It has been used in compliance with the Data Use Agreement and the ODC-BY 1.0 license
 
-to perform the whole experiment follow these stwps:
+to perform the whole experiment follow these steps:
 - create the merged dataset with the ED python notebook file
 - clean the speeches with spacy_cleaner_gpu.py
 - build the fixed vocabulary for the tfidf vectorizer with vocabulary_builder notebook
